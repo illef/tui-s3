@@ -1148,6 +1148,8 @@ name = "tui-s3"
 version = "0.1.0"
 dependencies = [
  "reqwest",
+ "rusoto_core",
+ "rusoto_credential",
  "rusoto_s3",
  "tokio",
 ]
