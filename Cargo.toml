@@ -1,0 +1,11 @@
+[package]
+name = "tui-s3"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = "0.11.7"
+rusoto_s3 = "0.47.0"
+tokio = "1.14.0"
