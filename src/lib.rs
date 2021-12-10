@@ -1,14 +1,35 @@
+use aws_sdk_s3::model::{CommonPrefix, Object};
+
 pub mod frontend;
 
+// UI는 RuntimeState를 화면에 그리면 된다
 pub struct RuntimeState {
+    // 현재 선택된 버켓
+    bucket: Option<String>,
+    // 현재 조회하고 있는 prefix
     prefix: String,
+    // 현재 조회한 prefix 내 존재하는 directories
+    common_prefix: Option<Vec<CommonPrefix>>,
+    // 현재 조회한 prefix 내 존재하는 left key
+    contents: Option<Vec<Object>>,
 }
 
 impl RuntimeState {
     pub fn new() -> RuntimeState {
         RuntimeState {
-            prefix: String::default(),
+            bucket: Default::default(),
+            prefix: Default::default(),
+            common_prefix: Default::default(),
+            contents: Default::default(),
         }
+    }
+
+    pub fn directories(&self) -> &Option<Vec<CommonPrefix>> {
+        &self.common_prefix
+    }
+
+    pub fn keys(&self) -> &Option<Vec<Object>> {
+        &self.contents
     }
 
     pub fn prefix(&self) -> &str {
