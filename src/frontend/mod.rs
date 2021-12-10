@@ -9,7 +9,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    borrow::Borrow,
     io,
     sync::Arc,
     time::{Duration, Instant},
@@ -23,35 +22,18 @@ use tui::{
 };
 
 use crate::RuntimeState;
-
-enum S3ListItem {
-    Directory(CommonPrefix),
-    Key(Object),
-}
+use crate::S3Item;
 
 struct StatefulList {
     state: ListState,
-    items: Vec<S3ListItem>,
+    items: Vec<S3Item>,
 }
 
 impl StatefulList {
-    fn new(
-        common_prefixes: Option<Vec<CommonPrefix>>,
-        contents: Option<Vec<Object>>,
-    ) -> StatefulList {
-        let directory_items = common_prefixes
-            .unwrap_or(vec![])
-            .into_iter()
-            .map(|c| S3ListItem::Directory(c));
-
-        let key_items = contents
-            .unwrap_or(vec![])
-            .into_iter()
-            .map(|c| S3ListItem::Key(c));
-
+    fn new(items: Vec<S3Item>) -> StatefulList {
         StatefulList {
             state: Default::default(),
-            items: directory_items.chain(key_items).collect(),
+            items,
         }
     }
 
@@ -154,10 +136,7 @@ async fn run_app<B: Backend>(
 
     let mut stateful_list = {
         let runtime_state = runtime_state.lock().await;
-        StatefulList::new(
-            runtime_state.common_prefix.clone(),
-            runtime_state.contents.clone(),
-        )
+        StatefulList::new(runtime_state.items())
     };
 
     loop {
@@ -182,12 +161,16 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut StatefulList) {
         .iter()
         .map(|item| {
             let span = match item {
-                S3ListItem::Directory(d) => Spans::from(Span::styled(
+                S3Item::Directory(d) => Spans::from(Span::styled(
                     d.prefix().unwrap_or("").to_owned(),
                     Style::default(),
                 )),
-                S3ListItem::Key(k) => Spans::from(Span::styled(
+                S3Item::Key(k) => Spans::from(Span::styled(
                     k.key().unwrap_or("").to_owned(),
+                    Style::default(),
+                )),
+                S3Item::Bucket(b) => Spans::from(Span::styled(
+                    b.name().unwrap_or("").to_owned(),
                     Style::default(),
                 )),
             };

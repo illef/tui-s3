@@ -1,6 +1,32 @@
-use aws_sdk_s3::model::{CommonPrefix, Object};
+use aws_sdk_s3::model::{Bucket, CommonPrefix, Object};
 
 pub mod frontend;
+pub mod s3;
+
+#[derive(Clone, Debug)]
+pub enum S3Item {
+    Bucket(Bucket),
+    Directory(CommonPrefix),
+    Key(Object),
+}
+
+impl From<Bucket> for S3Item {
+    fn from(bucket: Bucket) -> Self {
+        S3Item::Bucket(bucket)
+    }
+}
+
+impl From<CommonPrefix> for S3Item {
+    fn from(common_prefix: CommonPrefix) -> Self {
+        S3Item::Directory(common_prefix)
+    }
+}
+
+impl From<Object> for S3Item {
+    fn from(object: Object) -> Self {
+        S3Item::Key(object)
+    }
+}
 
 // UI는 RuntimeState를 화면에 그리면 된다
 pub struct RuntimeState {
@@ -8,10 +34,9 @@ pub struct RuntimeState {
     bucket: Option<String>,
     // 현재 조회하고 있는 prefix
     prefix: String,
-    // 현재 조회한 prefix 내 존재하는 directories
-    common_prefix: Option<Vec<CommonPrefix>>,
-    // 현재 조회한 prefix 내 존재하는 left key
-    contents: Option<Vec<Object>>,
+
+    // 현재 화면에 보여줄 Item
+    items: Vec<S3Item>,
 }
 
 impl RuntimeState {
@@ -19,25 +44,20 @@ impl RuntimeState {
         RuntimeState {
             bucket: Default::default(),
             prefix: Default::default(),
-            common_prefix: Default::default(),
-            contents: Default::default(),
+            items: Default::default(),
         }
     }
 
-    pub fn set_common_prefixes(&mut self, common_prefix: Option<Vec<CommonPrefix>>) {
-        self.common_prefix = common_prefix;
+    pub fn items(&self) -> Vec<S3Item> {
+        self.items.clone()
     }
 
-    pub fn set_contents(&mut self, contents: Option<Vec<Object>>) {
-        self.contents = contents;
+    pub fn set_bucket(&mut self, bucket: String) {
+        self.bucket = Some(bucket);
     }
 
-    pub fn directories(&self) -> &Option<Vec<CommonPrefix>> {
-        &self.common_prefix
-    }
-
-    pub fn keys(&self) -> &Option<Vec<Object>> {
-        &self.contents
+    pub fn set_items(&mut self, items: Vec<S3Item>) {
+        self.items = items;
     }
 
     pub fn prefix(&self) -> &str {
