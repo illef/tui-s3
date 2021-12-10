@@ -24,6 +24,14 @@ impl RuntimeState {
         }
     }
 
+    pub fn set_common_prefixes(&mut self, common_prefix: Option<Vec<CommonPrefix>>) {
+        self.common_prefix = common_prefix;
+    }
+
+    pub fn set_contents(&mut self, contents: Option<Vec<Object>>) {
+        self.contents = contents;
+    }
+
     pub fn directories(&self) -> &Option<Vec<CommonPrefix>> {
         &self.common_prefix
     }
