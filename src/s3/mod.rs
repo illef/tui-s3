@@ -5,8 +5,7 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::{Client, Region};
 use tokio::sync::{mpsc::Sender, Mutex};
 
-use crate::RuntimeState;
-use crate::S3ClientEvent;
+use crate::{FrontendEvent, RuntimeState, S3ClientEvent};
 
 pub struct S3Client {
     client: Client,

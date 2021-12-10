@@ -23,8 +23,7 @@ use tui::{
     Frame, Terminal,
 };
 
-use crate::S3Item;
-use crate::{RuntimeState, S3ClientEvent};
+use crate::{RuntimeState, S3ClientEvent, S3Item};
 
 struct StatefulList {
     state: ListState,

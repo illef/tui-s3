@@ -1,12 +1,9 @@
 use eyre::Result;
 
 use std::sync::Arc;
-use tokio::sync::mpsc::channel;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc::channel, Mutex};
 
-use tui_s3::frontend::run_frontend;
-use tui_s3::s3::S3Client;
-use tui_s3::RuntimeState;
+use tui_s3::{frontend::run_frontend, s3::S3Client, RuntimeState};
 
 #[tokio::main]
 async fn main() -> Result<()> {
