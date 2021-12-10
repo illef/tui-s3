@@ -1,43 +1,12 @@
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::{Client, Error, Region};
-use futures_util::stream::StreamExt;
+use aws_sdk_s3::{Client, Region};
 use std::io::Write;
-use tokio::io::{self, AsyncWriteExt};
+
+use futures_util::stream::StreamExt;
+use tokio::io;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
-struct RuntimeState {
-    prefix: String,
-}
-
-impl RuntimeState {
-    fn new() -> RuntimeState {
-        RuntimeState {
-            prefix: String::default(),
-        }
-    }
-
-    fn prefix(&self) -> &str {
-        &self.prefix
-    }
-
-    fn set_prefix(&mut self, prefix: &str) {
-        self.prefix = prefix.into()
-    }
-
-    fn pop(&mut self) {
-        if !self.prefix.is_empty() {
-            assert!(self.prefix.ends_with("/"));
-            let mut split = self.prefix.split("/").collect::<Vec<_>>();
-            split.pop(); // last member is empty string
-            split.pop(); // delete last component
-            if split.len() > 0 {
-                self.prefix = split.join("/") + "/";
-            } else {
-                self.prefix.clear();
-            }
-        }
-    }
-}
+use tui_s3::RuntimeState;
 
 async fn get_line() -> Result<String, Box<dyn std::error::Error>> {
     let stdin = io::stdin();
@@ -100,23 +69,5 @@ async fn main() {
                 break;
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_runtime_state_prefix() {
-        let mut runtime_state = RuntimeState::new();
-        assert_eq!(runtime_state.prefix, "");
-        runtime_state.set_prefix("test/");
-        assert_eq!(runtime_state.prefix, "test/");
-        runtime_state.pop();
-        assert_eq!(runtime_state.prefix, "");
-        runtime_state.set_prefix("test/test/");
-        runtime_state.pop();
-        assert_eq!(runtime_state.prefix, "test/");
     }
 }
