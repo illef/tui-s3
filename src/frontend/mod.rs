@@ -1,7 +1,9 @@
-use aws_sdk_s3::model::{CommonPrefix, Object};
 use eyre::Result;
 
-use tokio::sync::{mpsc::channel, Mutex};
+use tokio::sync::{
+    mpsc::{channel, Receiver},
+    Mutex,
+};
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -21,8 +23,8 @@ use tui::{
     Frame, Terminal,
 };
 
-use crate::RuntimeState;
 use crate::S3Item;
+use crate::{RuntimeState, S3ClientEvent};
 
 struct StatefulList {
     state: ListState,
@@ -35,6 +37,11 @@ impl StatefulList {
             state: Default::default(),
             items,
         }
+    }
+
+    fn update(&mut self, items: Vec<S3Item>) {
+        self.state = Default::default();
+        self.items = items;
     }
 
     fn next(&mut self) {
@@ -78,7 +85,10 @@ impl StatefulList {
     }
 }
 
-pub async fn run_frontend(runtime_state: Arc<Mutex<RuntimeState>>) -> Result<()> {
+pub async fn run_frontend(
+    runtime_state: Arc<Mutex<RuntimeState>>,
+    s3_event_receiver: Receiver<S3ClientEvent>,
+) -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -86,7 +96,7 @@ pub async fn run_frontend(runtime_state: Arc<Mutex<RuntimeState>>) -> Result<()>
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal, runtime_state).await;
+    let res = run_app(&mut terminal, runtime_state, s3_event_receiver).await;
 
     // restore terminal
     disable_raw_mode()?;
@@ -128,6 +138,7 @@ fn run_key_event_sender(tx: tokio::sync::mpsc::Sender<Event>) {
 async fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     runtime_state: Arc<Mutex<RuntimeState>>,
+    mut s3_event_receiver: Receiver<S3ClientEvent>,
 ) -> Result<()> {
     let (tx, mut event_rx) = channel::<Event>(10);
 
@@ -142,13 +153,20 @@ async fn run_app<B: Backend>(
     loop {
         terminal.draw(|f| ui(f, &mut stateful_list))?;
 
-        if let Some(Event::Key(key)) = event_rx.recv().await {
-            match key.code {
-                KeyCode::Char('q') => return Ok(()),
-                KeyCode::Left => stateful_list.unselect(),
-                KeyCode::Down => stateful_list.next(),
-                KeyCode::Up => stateful_list.previous(),
-                _ => {}
+        tokio::select! {
+            Some(Event::Key(key)) = event_rx.recv() => {
+                 match key.code {
+                     KeyCode::Char('q') => return Ok(()),
+                     KeyCode::Left => stateful_list.unselect(),
+                     KeyCode::Down => stateful_list.next(),
+                     KeyCode::Up => stateful_list.previous(),
+                     _ => {}
+                 }
+             },
+            _ = s3_event_receiver.recv() => {
+                 let rs = runtime_state.lock().await;
+                 stateful_list.update(rs.items());
+
             }
         }
     }

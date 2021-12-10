@@ -28,6 +28,22 @@ impl From<Object> for S3Item {
     }
 }
 
+// S3Client 가 전달하는 작업 이벤트
+#[derive(Debug)]
+pub enum S3ClientEvent {
+    Completed,
+    Progessing(String),
+}
+
+// S3Client 가 작업을 마친후 생성하는 이벤트
+#[derive(Debug)]
+pub enum FrontendEvent {
+    // 버켓, 또는 directory 내부로 들어가길 요청하는 이벤트
+    Enter(S3Item),
+    // S3Storage를 refresh하라는 이벤트
+    Refesh,
+}
+
 // UI는 RuntimeState를 화면에 그리면 된다
 pub struct RuntimeState {
     // 현재 선택된 버켓
