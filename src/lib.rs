@@ -1,3 +1,5 @@
+pub mod frontend;
+
 pub struct RuntimeState {
     prefix: String,
 }
