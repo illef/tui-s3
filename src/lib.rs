@@ -1,4 +1,7 @@
-use aws_sdk_s3::model::{Bucket, CommonPrefix, Object};
+use aws_sdk_s3::{
+    model::{Bucket, CommonPrefix, Object},
+    output::ListObjectsOutput,
+};
 
 pub mod frontend;
 pub mod s3;
@@ -8,6 +11,24 @@ pub enum S3Item {
     Bucket(Bucket),
     Directory(CommonPrefix),
     Key(Object),
+}
+
+impl S3Item {
+    fn from_list_output(output: &ListObjectsOutput) -> Vec<S3Item> {
+        output
+            .common_prefixes()
+            .unwrap_or_default()
+            .iter()
+            .map(|p: &CommonPrefix| S3Item::from(p.clone()))
+            .chain(
+                output
+                    .contents()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p| S3Item::from(p.clone())),
+            )
+            .collect()
+    }
 }
 
 impl From<Bucket> for S3Item {
@@ -42,6 +63,7 @@ pub enum FrontendEvent {
     Enter(S3Item),
     // S3Storage를 refresh하라는 이벤트
     Refesh,
+    End,
 }
 
 // UI는 RuntimeState를 화면에 그리면 된다
@@ -66,6 +88,10 @@ impl RuntimeState {
 
     pub fn items(&self) -> Vec<S3Item> {
         self.items.clone()
+    }
+
+    pub fn bucket(&self) -> Option<String> {
+        self.bucket.clone()
     }
 
     pub fn set_bucket(&mut self, bucket: String) {

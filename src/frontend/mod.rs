@@ -1,7 +1,7 @@
 use eyre::Result;
 
 use tokio::sync::{
-    mpsc::{channel, Receiver},
+    mpsc::{channel, Receiver, Sender},
     Mutex,
 };
 
@@ -23,7 +23,7 @@ use tui::{
     Frame, Terminal,
 };
 
-use crate::{RuntimeState, S3ClientEvent, S3Item};
+use crate::{FrontendEvent, RuntimeState, S3ClientEvent, S3Item};
 
 struct StatefulList {
     state: ListState,
@@ -87,6 +87,7 @@ impl StatefulList {
 pub async fn run_frontend(
     runtime_state: Arc<Mutex<RuntimeState>>,
     s3_event_receiver: Receiver<S3ClientEvent>,
+    frontend_event_sender: Sender<FrontendEvent>,
 ) -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
@@ -95,7 +96,13 @@ pub async fn run_frontend(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal, runtime_state, s3_event_receiver).await;
+    let res = run_app(
+        &mut terminal,
+        runtime_state,
+        s3_event_receiver,
+        frontend_event_sender,
+    )
+    .await;
 
     // restore terminal
     disable_raw_mode()?;
@@ -138,6 +145,7 @@ async fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     runtime_state: Arc<Mutex<RuntimeState>>,
     mut s3_event_receiver: Receiver<S3ClientEvent>,
+    frontend_event_sender: Sender<FrontendEvent>,
 ) -> Result<()> {
     let (tx, mut event_rx) = channel::<Event>(10);
 
@@ -155,10 +163,21 @@ async fn run_app<B: Backend>(
         tokio::select! {
             Some(Event::Key(key)) = event_rx.recv() => {
                  match key.code {
-                     KeyCode::Char('q') => return Ok(()),
+                     // 종료
+                     KeyCode::Char('q') => {
+                        frontend_event_sender.send(FrontendEvent::End).await?;
+                        return Ok(());
+                     },
                      KeyCode::Left => stateful_list.unselect(),
                      KeyCode::Down => stateful_list.next(),
                      KeyCode::Up => stateful_list.previous(),
+                     KeyCode::Enter => { // 선택된 bucket 또는 directory 내부로 들어간다
+                         if let Some(i) = stateful_list.state.selected() {
+                            if i < stateful_list.items.len() {
+                                frontend_event_sender.send(FrontendEvent::Enter(stateful_list.items[i].clone())).await?;
+                            }
+                         }
+                     },
                      _ => {}
                  }
              },
