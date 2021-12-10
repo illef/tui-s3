@@ -60,6 +60,10 @@ impl S3Client {
                 runtime_state.bucket().unwrap_or_default(),
                 d.prefix().unwrap_or_default().to_owned(),
             )),
+            S3Item::Pop => Some((
+                runtime_state.bucket().unwrap_or_default(),
+                runtime_state.pop_prefix(),
+            )),
             _ => None,
         } {
             let list_output = self

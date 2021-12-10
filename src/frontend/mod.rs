@@ -209,6 +209,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut StatefulList) {
                     b.name().unwrap_or("").to_owned(),
                     Style::default(),
                 )),
+                S3Item::Pop => Spans::from(Span::styled("..", Style::default())),
             };
             ListItem::new(span).style(Style::default().fg(Color::White).bg(Color::Black))
         })

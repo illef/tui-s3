@@ -6,8 +6,9 @@ use aws_sdk_s3::{
 pub mod frontend;
 pub mod s3;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum S3Item {
+    Pop, //상위 디렉토리를 가리키는 객체
     Bucket(Bucket),
     Directory(CommonPrefix),
     Key(Object),
@@ -15,11 +16,14 @@ pub enum S3Item {
 
 impl S3Item {
     fn from_list_output(output: &ListObjectsOutput) -> Vec<S3Item> {
-        output
-            .common_prefixes()
-            .unwrap_or_default()
-            .iter()
-            .map(|p: &CommonPrefix| S3Item::from(p.clone()))
+        std::iter::once(S3Item::Pop)
+            .chain(
+                output
+                    .common_prefixes()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p: &CommonPrefix| S3Item::from(p.clone())),
+            )
             .chain(
                 output
                     .contents()
@@ -110,18 +114,17 @@ impl RuntimeState {
         self.prefix = prefix.into()
     }
 
-    pub fn pop(&mut self) {
+    pub fn pop_prefix(&self) -> String {
         if !self.prefix.is_empty() {
             assert!(self.prefix.ends_with("/"));
             let mut split = self.prefix.split("/").collect::<Vec<_>>();
             split.pop(); // last member is empty string
             split.pop(); // delete last component
             if split.len() > 0 {
-                self.prefix = split.join("/") + "/";
-            } else {
-                self.prefix.clear();
+                return split.join("/") + "/";
             }
         }
+        String::default()
     }
 }
 
@@ -135,10 +138,8 @@ mod tests {
         assert_eq!(runtime_state.prefix, "");
         runtime_state.set_prefix("test/");
         assert_eq!(runtime_state.prefix, "test/");
-        runtime_state.pop();
-        assert_eq!(runtime_state.prefix, "");
+        assert_eq!(runtime_state.pop_prefix(), "");
         runtime_state.set_prefix("test/test/");
-        runtime_state.pop();
-        assert_eq!(runtime_state.prefix, "test/");
+        assert_eq!(runtime_state.pop_prefix(), "test/");
     }
 }
