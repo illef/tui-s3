@@ -37,8 +37,8 @@ impl S3Item {
     pub fn as_row(&self) -> (String, String, String) {
         match self {
             S3Item::Directory(d) => (
-                String::default(),
                 "PRE".to_owned(),
+                String::default(),
                 d.prefix().unwrap_or("").to_owned(),
             ),
 
