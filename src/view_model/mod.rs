@@ -1,7 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use aws_sdk_s3::output::{ListBucketsOutput, ListObjectsOutput};
-use tui::widgets::ListState;
+use tui::widgets::{List, ListState};
 
 use crate::S3Item;
+
+pub mod ui_converter;
 
 #[derive(Debug, PartialEq)]
 pub enum S3OutputType {
@@ -21,6 +25,18 @@ impl S3Output {
             &S3Output::Objects(_) => S3OutputType::Objects,
         }
     }
+
+    pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
+        match &self {
+            S3Output::Buckets(_) => None,
+            S3Output::Objects(o) => Some((
+                o.name().map(|o| o.to_owned()).unwrap_or(String::default()),
+                o.prefix()
+                    .map(|o| o.to_owned())
+                    .unwrap_or(String::default()),
+            )),
+        }
+    }
 }
 
 pub struct S3ItemViewModel {
@@ -29,6 +45,10 @@ pub struct S3ItemViewModel {
 }
 
 impl S3ItemViewModel {
+    fn items(&self) -> &StatefulList<S3Item> {
+        &self.items
+    }
+
     fn make_s3_item_from_buckets(output: &ListBucketsOutput) -> Vec<S3Item> {
         output
             .buckets
@@ -79,16 +99,8 @@ impl S3ItemViewModel {
         self.output = s3_output;
     }
 
-    pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
-        match &self.output {
-            S3Output::Buckets(_) => None,
-            S3Output::Objects(o) => Some((
-                o.name().map(|o| o.to_owned()).unwrap_or(String::default()),
-                o.prefix()
-                    .map(|o| o.to_owned())
-                    .unwrap_or(String::default()),
-            )),
-        }
+    pub fn output(&self) -> &S3Output {
+        &self.output
     }
 
     pub fn selected(&self) -> Option<&S3Item> {
@@ -103,6 +115,10 @@ pub struct S3ItemsViewModel {
 impl S3ItemsViewModel {
     pub fn new() -> Self {
         Self { item_stack: vec![] }
+    }
+
+    pub fn make_view(&self) -> Option<(List<'static>, Arc<Mutex<ListState>>)> {
+        self.item_stack.last().map(|i| i.into())
     }
 
     pub fn next(&mut self) {
@@ -125,6 +141,18 @@ impl S3ItemsViewModel {
         self.item_stack.push(S3ItemViewModel::new(s3_output));
     }
 
+    // 현재 보여지는 값을 전달된 s3_output으로 update한다
+    pub fn update(&mut self, s3_output: S3Output) {
+        let bucket_and_prefix = self.bucket_and_prefix();
+        if let Some(item) = self.item_stack.last_mut() {
+            if s3_output.bucket_and_prefix() == bucket_and_prefix {
+                item.update_output(s3_output);
+            }
+        } else {
+            self.push(s3_output);
+        }
+    }
+
     pub fn selected(&self) -> Option<&S3Item> {
         self.item_stack.last().map(|i| i.selected()).flatten()
     }
@@ -132,17 +160,24 @@ impl S3ItemsViewModel {
     pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
         self.item_stack
             .last()
-            .map(|i| i.bucket_and_prefix())
+            .map(|i| i.output().bucket_and_prefix())
             .flatten()
     }
 }
 
 struct StatefulList<T> {
-    state: ListState,
+    state: Arc<Mutex<ListState>>,
     items: Vec<T>,
 }
 
 impl<T> StatefulList<T> {
+    pub fn state(&self) -> Arc<Mutex<ListState>> {
+        self.state.clone()
+    }
+    pub fn items(&self) -> &Vec<T> {
+        &self.items
+    }
+
     fn new(items: Vec<T>) -> Self {
         let mut s = StatefulList {
             state: Default::default(),
@@ -153,23 +188,29 @@ impl<T> StatefulList<T> {
     }
 
     fn selected(&self) -> Option<&T> {
-        self.state.selected().map(|i| &self.items[i])
+        self.state
+            .lock()
+            .expect("state lock fail")
+            .selected()
+            .map(|i| &self.items[i])
     }
 
     fn update(&mut self, items: Vec<T>) {
         self.items = items;
-        if let Some(i) = self.state.selected() {
+        let mut state = self.state.lock().expect("state lock fail");
+        if let Some(i) = state.selected() {
             if i >= self.items.len() {
-                self.state.select(Some(self.items.len() - 1));
+                state.select(Some(self.items.len() - 1));
             }
         }
     }
 
     fn next(&mut self) {
+        let mut state = self.state.lock().expect("state lock fail");
         if self.items.len() == 0 {
-            self.state.select(None);
+            self.state.lock().expect("state lock fail").select(None);
         } else {
-            let i = match self.state.selected() {
+            let i = match state.selected() {
                 Some(i) => {
                     if i >= self.items.len() - 1 {
                         0
@@ -179,15 +220,16 @@ impl<T> StatefulList<T> {
                 }
                 None => 0,
             };
-            self.state.select(Some(i));
+            state.select(Some(i));
         }
     }
 
     fn previous(&mut self) {
+        let mut state = self.state.lock().expect("state lock fail");
         if self.items.len() == 0 {
-            self.state.select(None);
+            state.select(None);
         } else {
-            let i = match self.state.selected() {
+            let i = match state.selected() {
                 Some(i) => {
                     if i > 0 {
                         i - 1
@@ -197,12 +239,8 @@ impl<T> StatefulList<T> {
                 }
                 None => 0,
             };
-            self.state.select(Some(i));
+            state.select(Some(i));
         }
-    }
-
-    fn unselect(&mut self) {
-        self.state.select(None);
     }
 }
 
