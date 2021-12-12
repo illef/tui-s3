@@ -10,6 +10,10 @@ use crossterm::{
 use std::{io, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    text::{Span, Text},
+    widgets::Paragraph,
     Terminal,
 };
 
@@ -105,12 +109,28 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let key_event_sender = run_key_event_sender(tx, exit_rx);
 
     'ui: loop {
+        let selected_s3_uri = controller.view_model().lock().await.selected_s3_uri();
         if let Some((widget, state)) = controller.view_model().lock().await.make_view() {
             terminal.draw(|f| {
+                let rect = f.size();
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(rect.height - 1), Constraint::Min(1)].as_ref())
+                    .split(f.size());
+
+                let lines = Text::from(Span::styled(
+                    selected_s3_uri,
+                    Style::default().fg(Color::Yellow),
+                ));
+                let paragraph = Paragraph::new(lines).style(Style::default());
+
                 f.render_stateful_widget(
                     widget,
-                    f.size(),
+                    chunks[0], //list_view
                     &mut state.lock().expect("state lock fail"),
+                );
+                f.render_widget(
+                    paragraph, chunks[1], //list_view
                 );
             })?;
         }

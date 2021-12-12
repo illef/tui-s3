@@ -118,6 +118,27 @@ impl S3ItemsViewModel {
         self.item_stack.last().map(|i| i.into())
     }
 
+    pub fn selected_s3_uri(&self) -> String {
+        match self.selected() {
+            Some(S3Item::Bucket(b)) => format!("s3://{}", b.bucket.name().as_ref().unwrap_or(&"")),
+            Some(S3Item::Directory(d)) => {
+                if let Some((bucket, _)) = self.bucket_and_prefix() {
+                    format!("s3://{}/{}", bucket, d.prefix().as_ref().unwrap_or(&""))
+                } else {
+                    String::default()
+                }
+            }
+            Some(S3Item::Key(k)) => {
+                if let Some((bucket, _)) = self.bucket_and_prefix() {
+                    format!("s3://{}/{}", bucket, k.key().as_ref().unwrap_or(&""))
+                } else {
+                    String::default()
+                }
+            }
+            _ => String::default(),
+        }
+    }
+
     pub fn next(&mut self) {
         if let Some(i) = self.item_stack.last_mut() {
             i.items.next();
