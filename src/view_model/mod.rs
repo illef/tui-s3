@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use aws_sdk_s3::output::{ListBucketsOutput, ListObjectsOutput};
+use aws_sdk_s3::output::{ListObjectsOutput};
 use tui::widgets::{List, ListState};
 
-use crate::S3Item;
+use crate::{s3::BucketWithLocation, S3Item};
 
 pub mod ui_converter;
 
@@ -14,7 +14,7 @@ pub enum S3OutputType {
 }
 
 pub enum S3Output {
-    Buckets(ListBucketsOutput),
+    Buckets(Vec<BucketWithLocation>),
     Objects(ListObjectsOutput),
 }
 
@@ -49,11 +49,8 @@ impl S3ItemViewModel {
         &self.items
     }
 
-    fn make_s3_item_from_buckets(output: &ListBucketsOutput) -> Vec<S3Item> {
+    fn make_s3_item_from_buckets(output: &Vec<BucketWithLocation>) -> Vec<S3Item> {
         output
-            .buckets
-            .as_ref()
-            .unwrap_or(&vec![])
             .iter()
             .map(|b| S3Item::Bucket(b.to_owned()))
             .collect()
@@ -250,8 +247,8 @@ mod tests {
     use crate::S3Item;
 
     use aws_sdk_s3::{
-        model::{Bucket, Object},
-        output::{ListBucketsOutput, ListObjectsOutput},
+        model::{Bucket, BucketLocationConstraint, Object},
+        output::{ListObjectsOutput},
     };
 
     #[test]
@@ -261,47 +258,53 @@ mod tests {
         assert_eq!(vm.bucket_and_prefix(), None);
         assert_eq!(vm.selected(), None);
 
-        let bucket_list_output = {
+        let bucket_list_output: Vec<BucketWithLocation> = {
             // 버킷 조회 상태
             let bucket_list = vec![
                 Bucket::builder().name("bucket1").build(),
                 Bucket::builder().name("bucket2").build(),
                 Bucket::builder().name("bucket3").build(),
             ];
-            ListBucketsOutput::builder()
-                .set_buckets(Some(bucket_list))
-                .build()
+            let location_list = vec![
+                BucketLocationConstraint::ApNortheast1,
+                BucketLocationConstraint::ApNortheast1,
+                BucketLocationConstraint::ApNortheast1,
+            ];
+
+            location_list
+                .into_iter()
+                .zip(bucket_list.into_iter())
+                .map(|(l, b)| BucketWithLocation {
+                    location: l,
+                    bucket: b,
+                })
+                .collect()
         };
 
         // 버킷 조회 결과를 push
         vm.push(S3Output::Buckets(bucket_list_output.clone()));
         assert_eq!(vm.bucket_and_prefix(), None);
-        let expect_selected = bucket_list_output
-            .clone()
-            .buckets()
-            .map(|b| b[0].to_owned())
-            .unwrap();
         assert_eq!(
             vm.selected(),
-            Some(&S3Item::Bucket(expect_selected.clone()))
+            Some(&S3Item::Bucket(bucket_list_output[0].clone()))
         );
         vm.previous();
         assert_eq!(
             vm.selected(),
-            Some(&S3Item::Bucket(expect_selected.clone()))
+            Some(&S3Item::Bucket(bucket_list_output[0].clone()))
         );
 
-        // next 선택
-        let expect_selected2 = bucket_list_output
-            .clone()
-            .buckets()
-            .map(|b| b[1].to_owned())
-            .unwrap();
         vm.next();
-        assert_eq!(vm.selected(), Some(&S3Item::Bucket(expect_selected2)));
+        assert_eq!(
+            vm.selected(),
+            Some(&S3Item::Bucket(bucket_list_output[1].clone()))
+        );
         vm.previous();
 
-        assert_eq!(vm.selected(), Some(&S3Item::Bucket(expect_selected)));
+        assert_eq!(
+            vm.selected(),
+            Some(&S3Item::Bucket(bucket_list_output[0].clone()))
+        );
 
         let object_list_output = {
             // 버킷, prefix 조회 상태

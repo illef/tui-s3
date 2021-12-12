@@ -83,9 +83,14 @@ impl S3ItemsViewModelController {
                 self.vm.lock().await.pop();
                 None
             }
-            Some(S3Item::Bucket(b)) => {
-                Some((b.name().map(|b| b.to_owned()).unwrap(), "".to_owned()))
-            }
+            Some(S3Item::Bucket(bucket_with_location)) => Some((
+                bucket_with_location
+                    .bucket
+                    .name()
+                    .map(|b| b.to_owned())
+                    .unwrap(),
+                "".to_owned(),
+            )),
             Some(S3Item::Directory(d)) => Some((
                 self.vm
                     .lock()

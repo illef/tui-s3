@@ -17,10 +17,16 @@ impl Into<ListItem<'static>> for &S3Item {
                 k.key().unwrap_or("").to_owned(),
                 Style::default(),
             )),
-            S3Item::Bucket(b) => Spans::from(Span::styled(
-                b.name().unwrap_or("").to_owned(),
-                Style::default(),
-            )),
+            S3Item::Bucket(bucket_with_location) => Spans::from(vec![
+                Span::styled(
+                    bucket_with_location.location.as_str().to_owned(),
+                    Style::default(),
+                ),
+                Span::styled(
+                    bucket_with_location.bucket.name().unwrap_or("").to_owned(),
+                    Style::default(),
+                ),
+            ]),
             S3Item::Pop => Spans::from(Span::styled("..", Style::default())),
         };
 

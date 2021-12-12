@@ -2,17 +2,55 @@ use eyre::Result;
 
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::{
-    output::{ListBucketsOutput, ListObjectsOutput},
+    model::{Bucket, BucketLocationConstraint},
+    output::ListObjectsOutput,
     Client, Region,
 };
 pub struct S3Client {
     client: Client,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct BucketWithLocation {
+    pub location: BucketLocationConstraint,
+    pub bucket: Bucket,
+}
+
 impl S3Client {
-    pub async fn list_buckets(&self) -> Result<ListBucketsOutput> {
+    pub async fn list_buckets(&self) -> Result<Vec<BucketWithLocation>> {
         let output = self.client.list_buckets().send().await?;
-        Ok(output)
+        if let Some(buckets) = output.buckets() {
+            // bucket 과 location을 함께 구한다
+            let location_bucket_list = futures::future::join_all(
+                buckets
+                    .into_iter()
+                    .map(|b| (b.name(), b.to_owned()))
+                    .filter(|(name, _)| name.is_some())
+                    .map(|(name, bucket)| {
+                        let get_location = self
+                            .client
+                            .get_bucket_location()
+                            .bucket(name.unwrap())
+                            .send();
+                        let bucket = futures_util::future::ready(bucket);
+                        futures_util::future::join(get_location, bucket)
+                    }),
+            )
+            .await;
+            Ok(location_bucket_list
+                .into_iter()
+                .filter(|(location, _)| location.is_ok())
+                .map(|(location, bucket)| {
+                    (
+                        location.unwrap().location_constraint().unwrap().to_owned(),
+                        bucket,
+                    )
+                })
+                .map(|(location, bucket)| BucketWithLocation { location, bucket })
+                .collect())
+        } else {
+            Ok(vec![])
+        }
     }
 
     pub async fn list_objects(&self, bucket: &str, prefix: &str) -> Result<ListObjectsOutput> {

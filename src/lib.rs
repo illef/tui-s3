@@ -1,4 +1,5 @@
-use aws_sdk_s3::model::{Bucket, CommonPrefix, Object};
+use aws_sdk_s3::model::{CommonPrefix, Object};
+use s3::BucketWithLocation;
 
 pub mod controller;
 pub mod frontend;
@@ -8,13 +9,13 @@ pub mod view_model;
 #[derive(Clone, Debug, PartialEq)]
 pub enum S3Item {
     Pop, //상위 디렉토리를 가리키는 객체
-    Bucket(Bucket),
+    Bucket(BucketWithLocation),
     Directory(CommonPrefix),
     Key(Object),
 }
 
-impl From<Bucket> for S3Item {
-    fn from(bucket: Bucket) -> Self {
+impl From<BucketWithLocation> for S3Item {
+    fn from(bucket: BucketWithLocation) -> Self {
         S3Item::Bucket(bucket)
     }
 }
