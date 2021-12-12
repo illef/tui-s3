@@ -1,16 +1,13 @@
 use eyre::Result;
 
-use tokio::sync::mpsc::channel;
+use tokio::{sync::mpsc::channel, task::JoinHandle};
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    io,
-    time::{Duration, Instant},
-};
+use std::{io, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
     Terminal,
@@ -22,7 +19,7 @@ pub async fn run_frontend() -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -30,11 +27,7 @@ pub async fn run_frontend() -> Result<()> {
 
     // restore terminal
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
 
     if let Err(err) = res {
@@ -44,25 +37,59 @@ pub async fn run_frontend() -> Result<()> {
     Ok(())
 }
 
-fn run_key_event_sender(tx: tokio::sync::mpsc::Sender<Event>) {
-    let mut last_tick = Instant::now();
-    let tick_rate = Duration::from_millis(10);
-
+fn run_key_event_sender(
+    tx: tokio::sync::mpsc::Sender<Event>,
+    exit_receiver: std::sync::mpsc::Receiver<()>,
+) -> JoinHandle<Result<()>> {
     tokio::task::spawn_blocking(move || loop {
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or_else(|| Duration::from_secs(0));
-        if crossterm::event::poll(timeout).is_ok() {
+        if let Ok(_) = exit_receiver.try_recv() {
+            return Ok(());
+        }
+        if crossterm::event::poll(Duration::from_millis(100))? {
             if let Ok(event) = event::read() {
                 if tx.blocking_send(event).is_err() {
-                    break;
+                    return Ok(());
                 }
             }
         }
-        if last_tick.elapsed() >= tick_rate {
-            last_tick = Instant::now();
+    })
+}
+
+enum EventAction {
+    NeedReDraw,
+    NoNeedReDraw,
+    Exit,
+}
+
+async fn handle_event(
+    event: Option<Event>,
+    controller: &mut S3ItemsViewModelController,
+) -> EventAction {
+    if let Some(event) = event {
+        match event {
+            Event::Key(key) => match (key.code, key.modifiers) {
+                (KeyCode::Char('q'), _) => EventAction::Exit,
+                (KeyCode::Down, _) => {
+                    controller.next().await;
+                    EventAction::NeedReDraw
+                }
+                (KeyCode::Up, _) => {
+                    controller.previous().await;
+                    EventAction::NeedReDraw
+                }
+                (KeyCode::Enter, _) => {
+                    controller.enter().await;
+                    EventAction::NeedReDraw
+                }
+                (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
+                _ => EventAction::NoNeedReDraw,
+            },
+            Event::Resize(_, _) => EventAction::NeedReDraw,
+            _ => EventAction::NoNeedReDraw,
         }
-    });
+    } else {
+        EventAction::NoNeedReDraw
+    }
 }
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
@@ -72,10 +99,12 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
     let mut controller = S3ItemsViewModelController::new(ev_tx).await?;
     controller.refresh().await;
 
-    // crossterm 으로 부터 이벤트를 받는다
-    run_key_event_sender(tx);
+    let (exit_tx, exit_rx) = std::sync::mpsc::channel();
 
-    loop {
+    // crossterm 으로 부터 이벤트를 받는다
+    let key_event_sender = run_key_event_sender(tx, exit_rx);
+
+    'ui: loop {
         if let Some((widget, state)) = controller.view_model().lock().await.make_view() {
             terminal.draw(|f| {
                 f.render_stateful_widget(
@@ -86,20 +115,26 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
             })?;
         }
 
-        tokio::select! {
-            Some(Event::Key(key)) = event_rx.recv() => {
-                 match key.code {
-                     // 종료
-                     KeyCode::Char('q') => {
-                        return Ok(());
-                     },
-                     KeyCode::Down => controller.next().await,
-                     KeyCode::Up => controller.previous().await,
-                     KeyCode::Enter =>controller.enter().await,
-                     _ => {}
-                 }
-             },
-            _ = update_rx.recv() => {}
+        'event: loop {
+            tokio::select! {
+                // Key Code 이벤트 처리
+                event = event_rx.recv() => {
+                    match handle_event(event, &mut controller).await {
+                        EventAction::Exit => {
+                            exit_tx.send(())?;
+                            break 'ui;
+                        }
+                        EventAction::NeedReDraw => { break 'event; }
+                        EventAction::NoNeedReDraw => {}
+                    }
+                 },
+                _ = update_rx.recv() => {
+                    break 'event;
+                }
+            }
         }
     }
+
+    key_event_sender.await??;
+    Ok(())
 }
