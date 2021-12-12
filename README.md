@@ -1,4 +1,5 @@
 ## TODO
+- [ ] Bucket을 리스팅 할때 Bucket location을 함께 표시하기
 - [ ] ListItem 에 날짜 표시하기
 - [ ] 상단에 현재 선택된 S3 Object 주소, 상세 정보를 보여주기
 - [ ] 에러 처리 (e.g 권한이 없는 버킷 접근)

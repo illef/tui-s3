@@ -1,0 +1,295 @@
+use aws_sdk_s3::output::{ListBucketsOutput, ListObjectsOutput};
+use tui::widgets::ListState;
+
+use crate::S3Item;
+
+#[derive(Debug, PartialEq)]
+pub enum S3OutputType {
+    Buckets,
+    Objects,
+}
+
+pub enum S3Output {
+    Buckets(ListBucketsOutput),
+    Objects(ListObjectsOutput),
+}
+
+impl S3Output {
+    fn output_type(&self) -> S3OutputType {
+        match self {
+            &S3Output::Buckets(_) => S3OutputType::Buckets,
+            &S3Output::Objects(_) => S3OutputType::Objects,
+        }
+    }
+}
+
+pub struct S3ItemViewModel {
+    items: StatefulList<S3Item>,
+    output: S3Output,
+}
+
+impl S3ItemViewModel {
+    fn make_s3_item_from_buckets(output: &ListBucketsOutput) -> Vec<S3Item> {
+        output
+            .buckets
+            .as_ref()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|b| S3Item::Bucket(b.to_owned()))
+            .collect()
+    }
+
+    fn make_s3_item_from_objects(output: &ListObjectsOutput) -> Vec<S3Item> {
+        std::iter::once(S3Item::Pop)
+            .chain(
+                output
+                    .common_prefixes()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p| S3Item::from(p.clone())),
+            )
+            .chain(
+                output
+                    .contents()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|p| S3Item::from(p.clone())),
+            )
+            .collect()
+    }
+
+    fn make_s3_item_from_output(s3_output: &S3Output) -> Vec<S3Item> {
+        match s3_output {
+            S3Output::Buckets(output) => Self::make_s3_item_from_buckets(&output),
+            S3Output::Objects(output) => Self::make_s3_item_from_objects(&output),
+        }
+    }
+
+    pub fn new(s3_output: S3Output) -> Self {
+        Self {
+            items: StatefulList::new(Self::make_s3_item_from_output(&s3_output)),
+            output: s3_output,
+        }
+    }
+
+    pub fn update_output(&mut self, s3_output: S3Output) {
+        assert_eq!(self.output.output_type(), s3_output.output_type());
+        self.items
+            .update(Self::make_s3_item_from_output(&s3_output));
+        self.output = s3_output;
+    }
+
+    pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
+        match &self.output {
+            S3Output::Buckets(_) => None,
+            S3Output::Objects(o) => Some((
+                o.name().map(|o| o.to_owned()).unwrap_or(String::default()),
+                o.prefix()
+                    .map(|o| o.to_owned())
+                    .unwrap_or(String::default()),
+            )),
+        }
+    }
+
+    pub fn selected(&self) -> Option<&S3Item> {
+        self.items.selected()
+    }
+}
+
+pub struct S3ItemsViewModel {
+    item_stack: Vec<S3ItemViewModel>,
+}
+
+impl S3ItemsViewModel {
+    pub fn new() -> Self {
+        Self { item_stack: vec![] }
+    }
+
+    pub fn next(&mut self) {
+        if let Some(i) = self.item_stack.last_mut() {
+            i.items.next();
+        }
+    }
+
+    pub fn previous(&mut self) {
+        if let Some(i) = self.item_stack.last_mut() {
+            i.items.previous();
+        }
+    }
+
+    pub fn pop(&mut self) {
+        self.item_stack.pop();
+    }
+
+    pub fn push(&mut self, s3_output: S3Output) {
+        self.item_stack.push(S3ItemViewModel::new(s3_output));
+    }
+
+    pub fn selected(&self) -> Option<&S3Item> {
+        self.item_stack.last().map(|i| i.selected()).flatten()
+    }
+
+    pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
+        self.item_stack
+            .last()
+            .map(|i| i.bucket_and_prefix())
+            .flatten()
+    }
+}
+
+struct StatefulList<T> {
+    state: ListState,
+    items: Vec<T>,
+}
+
+impl<T> StatefulList<T> {
+    fn new(items: Vec<T>) -> Self {
+        let mut s = StatefulList {
+            state: Default::default(),
+            items,
+        };
+        s.next();
+        s
+    }
+
+    fn selected(&self) -> Option<&T> {
+        self.state.selected().map(|i| &self.items[i])
+    }
+
+    fn update(&mut self, items: Vec<T>) {
+        self.items = items;
+        if let Some(i) = self.state.selected() {
+            if i >= self.items.len() {
+                self.state.select(Some(self.items.len() - 1));
+            }
+        }
+    }
+
+    fn next(&mut self) {
+        if self.items.len() == 0 {
+            self.state.select(None);
+        } else {
+            let i = match self.state.selected() {
+                Some(i) => {
+                    if i >= self.items.len() - 1 {
+                        0
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0,
+            };
+            self.state.select(Some(i));
+        }
+    }
+
+    fn previous(&mut self) {
+        if self.items.len() == 0 {
+            self.state.select(None);
+        } else {
+            let i = match self.state.selected() {
+                Some(i) => {
+                    if i > 0 {
+                        i - 1
+                    } else {
+                        0
+                    }
+                }
+                None => 0,
+            };
+            self.state.select(Some(i));
+        }
+    }
+
+    fn unselect(&mut self) {
+        self.state.select(None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::S3Item;
+
+    use aws_sdk_s3::{
+        model::{Bucket, Object},
+        output::{ListBucketsOutput, ListObjectsOutput},
+    };
+
+    #[test]
+    fn test_s3items_view_model() {
+        // 처음 상태
+        let mut vm = S3ItemsViewModel::new();
+        assert_eq!(vm.bucket_and_prefix(), None);
+        assert_eq!(vm.selected(), None);
+
+        let bucket_list_output = {
+            // 버킷 조회 상태
+            let bucket_list = vec![
+                Bucket::builder().name("bucket1").build(),
+                Bucket::builder().name("bucket2").build(),
+                Bucket::builder().name("bucket3").build(),
+            ];
+            ListBucketsOutput::builder()
+                .set_buckets(Some(bucket_list))
+                .build()
+        };
+
+        // 버킷 조회 결과를 push
+        vm.push(S3Output::Buckets(bucket_list_output.clone()));
+        assert_eq!(vm.bucket_and_prefix(), None);
+        let expect_selected = bucket_list_output
+            .clone()
+            .buckets()
+            .map(|b| b[0].to_owned())
+            .unwrap();
+        assert_eq!(
+            vm.selected(),
+            Some(&S3Item::Bucket(expect_selected.clone()))
+        );
+        vm.previous();
+        assert_eq!(
+            vm.selected(),
+            Some(&S3Item::Bucket(expect_selected.clone()))
+        );
+
+        // next 선택
+        let expect_selected2 = bucket_list_output
+            .clone()
+            .buckets()
+            .map(|b| b[1].to_owned())
+            .unwrap();
+        vm.next();
+        assert_eq!(vm.selected(), Some(&S3Item::Bucket(expect_selected2)));
+        vm.previous();
+
+        assert_eq!(vm.selected(), Some(&S3Item::Bucket(expect_selected)));
+
+        let object_list_output = {
+            // 버킷, prefix 조회 상태
+            let object_list = vec![
+                Object::builder().key("obj1").build(),
+                Object::builder().key("obj2").build(),
+                Object::builder().key("obj3").build(),
+            ];
+
+            ListObjectsOutput::builder()
+                .set_contents(Some(object_list))
+                .prefix("")
+                .build()
+        };
+        // enter to bucket
+        vm.push(S3Output::Objects(object_list_output.clone()));
+
+        assert_eq!(vm.selected(), Some(&S3Item::Pop));
+        vm.next();
+
+        let expect_selected = object_list_output
+            .clone()
+            .contents()
+            .map(|b| b[0].to_owned())
+            .unwrap();
+
+        assert_eq!(vm.selected(), Some(&S3Item::Key(expect_selected)));
+    }
+}

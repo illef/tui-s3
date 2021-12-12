@@ -77,7 +77,7 @@ impl S3Client {
 
             runtime_state.set_bucket(bucket_name);
             runtime_state.set_prefix(&prefix);
-            runtime_state.set_items(S3Item::from_list_output(&list_output));
+            runtime_state.set_items(S3Item::from_list_output(&list_output).0);
 
             self.event_sender.send(S3ClientEvent::Completed).await?;
         }

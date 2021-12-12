@@ -1,10 +1,11 @@
 use aws_sdk_s3::{
     model::{Bucket, CommonPrefix, Object},
-    output::ListObjectsOutput,
+    output::{ListBucketsOutput, ListObjectsOutput},
 };
 
 pub mod frontend;
 pub mod s3;
+pub mod view_model;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum S3Item {
@@ -15,23 +16,36 @@ pub enum S3Item {
 }
 
 impl S3Item {
-    fn from_list_output(output: &ListObjectsOutput) -> Vec<S3Item> {
-        std::iter::once(S3Item::Pop)
-            .chain(
-                output
-                    .common_prefixes()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|p: &CommonPrefix| S3Item::from(p.clone())),
-            )
-            .chain(
-                output
-                    .contents()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|p| S3Item::from(p.clone())),
-            )
+    fn from_list_bucket_output(output: &ListBucketsOutput) -> Vec<S3Item> {
+        output
+            .buckets
+            .as_ref()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|b| S3Item::Bucket(b.to_owned()))
             .collect()
+    }
+
+    fn from_list_output(
+        output: &ListObjectsOutput,
+    ) -> (Vec<S3Item>, Option<String>, Option<String>) {
+        (
+            output
+                .common_prefixes()
+                .unwrap_or_default()
+                .iter()
+                .map(|p: &CommonPrefix| S3Item::from(p.clone()))
+                .chain(
+                    output
+                        .contents()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|p| S3Item::from(p.clone())),
+                )
+                .collect(),
+            output.name().map(|n| n.to_owned()),
+            output.prefix().map(|p| p.to_owned()),
+        )
     }
 }
 
