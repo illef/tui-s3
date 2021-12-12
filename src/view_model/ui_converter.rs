@@ -1,43 +1,63 @@
+use strum::IntoEnumIterator;
 use tui::{
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{List, ListItem},
 };
 
+use crate::S3ItemType;
+
 use super::*;
 
-impl Into<ListItem<'static>> for &S3Item {
-    fn into(self) -> ListItem<'static> {
-        let span = match self {
-            S3Item::Directory(d) => Spans::from(Span::styled(
-                d.prefix().unwrap_or("").to_owned(),
-                Style::default(),
-            )),
-            S3Item::Key(k) => Spans::from(Span::styled(
-                k.key().unwrap_or("").to_owned(),
-                Style::default(),
-            )),
-            S3Item::Bucket(bucket_with_location) => Spans::from(vec![
-                Span::styled(
-                    bucket_with_location.location.as_str().to_owned(),
-                    Style::default(),
-                ),
-                Span::styled(
-                    bucket_with_location.bucket.name().unwrap_or("").to_owned(),
-                    Style::default(),
-                ),
-            ]),
-            S3Item::Pop => Spans::from(Span::styled("..", Style::default())),
-        };
-
-        ListItem::new(span).style(Style::default().fg(Color::White).bg(Color::Black))
+fn rows_into_list_item(columns: Vec<(String, String, String)>) -> Vec<ListItem<'static>> {
+    if columns.is_empty() {
+        return vec![];
     }
+    let first_column_hint = columns.iter().map(|t| t.0.len()).max().unwrap();
+    let second_column_hint = columns.iter().map(|t| t.1.len()).max().unwrap();
+
+    let get_left_padding = |width_hint, len| {
+        std::iter::repeat(" ")
+            .take(width_hint - len)
+            .fold(String::new(), |f, s| f + s)
+    };
+
+    columns
+        .into_iter()
+        .map(|i| {
+            ListItem::new(Spans::from(vec![
+                Span::styled(
+                    get_left_padding(first_column_hint, i.0.len()) + &i.0 + " ",
+                    Style::default().fg(Color::Magenta),
+                ),
+                Span::styled(
+                    get_left_padding(second_column_hint, i.1.len()) + &i.1 + " ",
+                    Style::default().fg(Color::Blue),
+                ),
+                Span::styled(i.2, Style::default()),
+            ]))
+            .style(Style::default().fg(Color::White).bg(Color::Black))
+        })
+        .collect()
 }
 
 impl Into<(List<'static>, Arc<Mutex<ListState>>)> for &S3ItemViewModel {
     fn into(self) -> (List<'static>, Arc<Mutex<ListState>>) {
         let list_state = self.items().state();
-        let list_items: Vec<ListItem> = self.items().items().iter().map(|i| i.into()).collect();
+        let s3items = self.items().items();
+
+        let list_items: Vec<_> = S3ItemType::iter()
+            .map(|t| {
+                let vec = s3items
+                    .iter()
+                    .filter(|i| i.get_type() == t)
+                    .map(|s| s.as_row())
+                    .collect();
+                rows_into_list_item(vec)
+            })
+            .flatten()
+            .collect();
+
         let items = List::new(list_items)
             .highlight_style(
                 Style::default()

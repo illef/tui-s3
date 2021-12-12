@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use aws_sdk_s3::output::{ListObjectsOutput};
+use aws_sdk_s3::output::ListObjectsOutput;
 use tui::widgets::{List, ListState};
 
 use crate::{s3::BucketWithLocation, S3Item};
@@ -248,7 +248,7 @@ mod tests {
 
     use aws_sdk_s3::{
         model::{Bucket, BucketLocationConstraint, Object},
-        output::{ListObjectsOutput},
+        output::ListObjectsOutput,
     };
 
     #[test]
