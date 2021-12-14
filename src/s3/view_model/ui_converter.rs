@@ -40,8 +40,8 @@ fn rows_into_list_item(columns: Vec<(String, String, String)>) -> Vec<ListItem<'
         .collect()
 }
 
-impl Into<(List<'static>, Arc<Mutex<ListState>>)> for &S3ItemViewModel {
-    fn into(self) -> (List<'static>, Arc<Mutex<ListState>>) {
+impl Into<(List<'static>, ListState)> for &S3ItemViewModel {
+    fn into(self) -> (List<'static>, ListState) {
         let list_state = self.items().state();
         let s3items = self.items().items();
 

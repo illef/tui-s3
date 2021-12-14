@@ -3,7 +3,7 @@ use eyre::Result;
 use tokio::{sync::mpsc::channel, task::JoinHandle};
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event as TerminalEvent, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -13,7 +13,7 @@ use tui::{
     Terminal,
 };
 
-use super::controller::Controller;
+use super::controller::{Controller, Event};
 
 pub async fn run_frontend(controller: Controller) -> Result<()> {
     // setup terminal
@@ -38,7 +38,7 @@ pub async fn run_frontend(controller: Controller) -> Result<()> {
 }
 
 fn run_key_event_sender(
-    tx: tokio::sync::mpsc::Sender<Event>,
+    tx: tokio::sync::mpsc::Sender<TerminalEvent>,
     exit_receiver: std::sync::mpsc::Receiver<()>,
 ) -> JoinHandle<Result<()>> {
     tokio::task::spawn_blocking(move || loop {
@@ -55,71 +55,41 @@ fn run_key_event_sender(
     })
 }
 
-enum EventAction {
+pub enum EventAction {
     NeedReDraw,
     NoNeedReDraw,
     Exit,
 }
 
-async fn handle_event(event: Option<Event>, controller: &mut Controller) -> EventAction {
-    if let Some(event) = event {
-        match event {
-            Event::Key(key) => match (key.code, key.modifiers) {
-                (KeyCode::Char('q'), _) => EventAction::Exit,
-                (KeyCode::Down, _) => {
-                    controller.next().await;
-                    EventAction::NeedReDraw
-                }
-                (KeyCode::Up, _) => {
-                    controller.previous().await;
-                    EventAction::NeedReDraw
-                }
-                (KeyCode::Enter, _) => {
-                    controller.enter().await;
-                    EventAction::NeedReDraw
-                }
-                (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
-                _ => EventAction::NoNeedReDraw,
-            },
-            Event::Resize(_, _) => EventAction::NeedReDraw,
-            _ => EventAction::NoNeedReDraw,
-        }
-    } else {
-        EventAction::NoNeedReDraw
-    }
-}
-
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut controller: Controller) -> Result<()> {
-    let (tx, mut event_rx) = channel::<Event>(10);
+    let (tx, mut event_rx) = channel::<TerminalEvent>(10);
 
-    let mut update_rx = controller.take_event_receiver();
+    let mut client_event_rx = controller.take_event_receiver();
     let (exit_tx, exit_rx) = std::sync::mpsc::channel();
 
     // crossterm 으로 부터 이벤트를 받는다
     let key_event_sender = run_key_event_sender(tx, exit_rx);
 
-    'ui: loop {
-        controller.draw(terminal).await?;
-        'event: loop {
-            tokio::select! {
-                // Key Code 이벤트 처리
-                event = event_rx.recv() => {
-                    match handle_event(event, &mut controller).await {
-                        EventAction::Exit => {
-                            exit_tx.send(())?;
-                            break 'ui;
-                        }
-                        EventAction::NeedReDraw => { break 'event; }
-                        EventAction::NoNeedReDraw => {}
-                    }
-                 },
-                _ = update_rx.recv() => {
-                    break 'event;
-                }
+    controller.draw(terminal)?;
+    loop {
+        let event = tokio::select! {
+            // Key Code 이벤트 처리
+            Some(event) = event_rx.recv() => Event::TerminalEvent(event),
+            Some(s3_output) = client_event_rx.recv() => Event::ClientEvent(s3_output)
+        };
+
+        match controller.handle_event(event).await {
+            EventAction::Exit => {
+                break;
             }
+            EventAction::NeedReDraw => {
+                controller.draw(terminal)?;
+            }
+            _ => {}
         }
     }
 
+    exit_tx.send(())?;
     key_event_sender.await??;
     Ok(())
 }

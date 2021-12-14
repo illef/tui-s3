@@ -14,6 +14,7 @@ pub enum S3OutputType {
     Objects,
 }
 
+#[derive(Debug)]
 pub enum S3Output {
     Buckets(Vec<BucketWithLocation>),
     Objects(ListObjectsOutput),
@@ -115,8 +116,14 @@ impl S3ItemsViewModel {
         Self { item_stack: vec![] }
     }
 
-    pub fn make_view(&self) -> Option<(List<'static>, Arc<Mutex<ListState>>)> {
+    pub fn make_view(&self) -> Option<(List<'static>, ListState)> {
         self.item_stack.last().map(|i| i.into())
+    }
+
+    pub fn reset_state(&mut self, state: ListState) {
+        if let Some(item) = self.item_stack.last_mut() {
+            item.items.state = state;
+        }
     }
 
     pub fn selected_s3_uri(&self) -> String {
@@ -185,12 +192,12 @@ impl S3ItemsViewModel {
 }
 
 struct StatefulList<T> {
-    state: Arc<Mutex<ListState>>,
+    state: ListState,
     items: Vec<T>,
 }
 
 impl<T> StatefulList<T> {
-    pub fn state(&self) -> Arc<Mutex<ListState>> {
+    pub fn state(&self) -> ListState {
         self.state.clone()
     }
     pub fn items(&self) -> &Vec<T> {
@@ -207,48 +214,41 @@ impl<T> StatefulList<T> {
     }
 
     fn selected(&self) -> Option<&T> {
-        self.state
-            .lock()
-            .expect("state lock fail")
-            .selected()
-            .map(|i| &self.items[i])
+        self.state.selected().map(|i| &self.items[i])
     }
 
     fn update(&mut self, items: Vec<T>) {
         self.items = items;
-        let mut state = self.state.lock().expect("state lock fail");
-        if let Some(i) = state.selected() {
+        if let Some(i) = self.state.selected() {
             if i >= self.items.len() {
-                state.select(Some(self.items.len() - 1));
+                self.state.select(Some(self.items.len() - 1));
             }
         }
     }
 
     fn next(&mut self) {
-        let mut state = self.state.lock().expect("state lock fail");
         if self.items.len() == 0 {
-            self.state.lock().expect("state lock fail").select(None);
+            self.state.select(None);
         } else {
-            let i = match state.selected() {
+            let i = match self.state.selected() {
                 Some(i) => {
-                    if i >= self.items.len() - 1 {
-                        0
-                    } else {
+                    if i < self.items.len() - 1 {
                         i + 1
+                    } else {
+                        i
                     }
                 }
                 None => 0,
             };
-            state.select(Some(i));
+            self.state.select(Some(i));
         }
     }
 
     fn previous(&mut self) {
-        let mut state = self.state.lock().expect("state lock fail");
         if self.items.len() == 0 {
-            state.select(None);
+            self.state.select(None);
         } else {
-            let i = match state.selected() {
+            let i = match self.state.selected() {
                 Some(i) => {
                     if i > 0 {
                         i - 1
@@ -258,7 +258,7 @@ impl<T> StatefulList<T> {
                 }
                 None => 0,
             };
-            state.select(Some(i));
+            self.state.select(Some(i));
         }
     }
 }

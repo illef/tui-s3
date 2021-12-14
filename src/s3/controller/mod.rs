@@ -9,8 +9,11 @@ use tui::{
     Frame, Terminal,
 };
 
+use crossterm::event::{Event as TerminalEvent, KeyCode, KeyModifiers};
+
 use super::{
     client::S3Client,
+    frontend::EventAction,
     view_model::{S3ItemsViewModel, S3Output},
     S3Item,
 };
@@ -28,21 +31,27 @@ pub struct Opt {
     s3_path: Option<String>,
 }
 
+#[derive(Debug)]
+pub enum Event {
+    ClientEvent(S3Output),
+    TerminalEvent(TerminalEvent),
+}
+
 pub struct Controller {
     // 컨트롤  대상
-    vm: Arc<Mutex<S3ItemsViewModel>>,
+    vm: S3ItemsViewModel,
     client: Arc<Mutex<S3Client>>,
     // UI를 다시 그릴것을 요청하기 위한 sender
-    ev_tx: Sender<()>,
+    ev_tx: Sender<S3Output>,
     // 후에 UI 쓰레드가 이 Receiver를 가져가게 된다
-    ev_rx: Option<Receiver<()>>,
+    ev_rx: Option<Receiver<S3Output>>,
 }
 
 impl Controller {
     pub async fn new(opt: Opt) -> Result<Self> {
         let (ev_tx, ev_rx) = channel(100);
         let mut controller = Self {
-            vm: Arc::new(Mutex::new(S3ItemsViewModel::new())),
+            vm: S3ItemsViewModel::new(),
             // TODO: 에러 처리
             client: Arc::new(Mutex::new(S3Client::new().await?)),
             ev_tx,
@@ -54,10 +63,11 @@ impl Controller {
         Ok(controller)
     }
 
-    pub async fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        let selected_s3_uri = self.view_model().lock().await.selected_s3_uri();
-        let bucket_and_prefix = self.view_model().lock().await.bucket_and_prefix();
-        if let Some((widget, state)) = self.view_model().lock().await.make_view() {
+    pub fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
+        let selected_s3_uri = self.vm.selected_s3_uri();
+        let bucket_and_prefix = self.vm.bucket_and_prefix();
+        let widget_and_state = self.vm.make_view();
+        if let Some((widget, mut state)) = widget_and_state {
             terminal.draw(|f| {
                 let rect = f.size();
                 let chunks = Layout::default()
@@ -91,9 +101,8 @@ impl Controller {
                 );
 
                 f.render_stateful_widget(
-                    widget,
-                    chunks[1], //list_view
-                    &mut state.lock().expect("state lock fail"),
+                    widget, chunks[1], //list_view
+                    &mut state,
                 );
 
                 let lines = Text::from(Span::styled(
@@ -106,76 +115,60 @@ impl Controller {
                     paragraph, chunks[2], //list_view
                 );
             })?;
+
+            self.vm.reset_state(state);
         }
         Ok(())
     }
 
-    pub fn take_event_receiver(&mut self) -> Receiver<()> {
+    pub fn take_event_receiver(&mut self) -> Receiver<S3Output> {
         self.ev_rx.take().unwrap()
-    }
-
-    pub fn view_model(&self) -> Arc<Mutex<S3ItemsViewModel>> {
-        self.vm.clone()
-    }
-
-    pub async fn previous(&mut self) {
-        self.vm.lock().await.previous();
-    }
-
-    pub async fn next(&mut self) {
-        self.vm.lock().await.next();
     }
 
     pub async fn init(&mut self, opt: Opt) -> Result<()> {
         let output = self.client.lock().await.list_buckets().await?;
-        self.vm.lock().await.update(S3Output::Buckets(output));
-        self.ev_tx.send(()).await.expect("ev_tx_copy send error");
+        self.vm.push(S3Output::Buckets(output));
         Ok(())
     }
 
-    pub async fn refresh(&mut self) {
-        let bucket_and_prefix = { self.vm.lock().await.bucket_and_prefix() };
-        let ev_tx_copy = self.ev_tx.clone();
-        let vm_copy = self.vm.clone();
-        let client_copy = self.client.clone();
-        match bucket_and_prefix {
-            None => {
-                tokio::spawn(async move {
-                    if let Ok(output) = client_copy.lock().await.list_buckets().await {
-                        vm_copy.lock().await.update(S3Output::Buckets(output));
-                        ev_tx_copy.send(()).await.expect("ev_tx_copy send error");
-                    } else {
-                        // TODO: error 처리
-                    }
-                });
+    pub async fn handle_event(&mut self, event: Event) -> EventAction {
+        match event {
+            Event::ClientEvent(s3output) => {
+                self.vm.push(s3output);
+                EventAction::NeedReDraw
             }
-            Some((bucket, prefix)) => {
-                tokio::spawn(async move {
-                    if let Ok(output) = client_copy
-                        .lock()
-                        .await
-                        .list_objects(&bucket, &prefix)
-                        .await
-                    {
-                        vm_copy.lock().await.update(S3Output::Objects(output));
-                        ev_tx_copy.send(()).await.expect("ev_tx_copy send error");
-                    } else {
-                        // TODO: error 처리
+            Event::TerminalEvent(terminal_event) => match terminal_event {
+                TerminalEvent::Key(key) => match (key.code, key.modifiers) {
+                    (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
+                    (KeyCode::Down, _) => {
+                        self.vm.next();
+                        EventAction::NeedReDraw
                     }
-                });
-            }
+                    (KeyCode::Up, _) => {
+                        self.vm.previous();
+                        EventAction::NeedReDraw
+                    }
+                    (KeyCode::Enter, _) => {
+                        self.enter().await;
+                        EventAction::NeedReDraw
+                    }
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
+                    _ => EventAction::Exit,
+                },
+                TerminalEvent::Resize(_, _) => EventAction::NeedReDraw,
+                _ => EventAction::NoNeedReDraw,
+            },
         }
     }
 
-    pub async fn enter(&mut self) {
-        let item = self.vm.lock().await.selected().map(|i| i.to_owned());
+    async fn enter(&mut self) {
+        let item = self.vm.selected();
         let ev_tx_copy = self.ev_tx.clone();
-        let vm_copy = self.vm.clone();
         let client_copy = self.client.clone();
 
         let bucket_and_prefix = match item {
             Some(S3Item::Pop) => {
-                self.vm.lock().await.pop();
+                self.vm.pop();
                 None
             }
             Some(S3Item::Bucket(bucket_with_location)) => Some((
@@ -187,12 +180,7 @@ impl Controller {
                 "".to_owned(),
             )),
             Some(S3Item::CommonPrefix(d)) => Some((
-                self.vm
-                    .lock()
-                    .await
-                    .bucket_and_prefix()
-                    .map(|b| b.0)
-                    .unwrap(),
+                self.vm.bucket_and_prefix().map(|b| b.0).unwrap(),
                 d.prefix().map(|d| d.to_owned()).unwrap(),
             )),
             _ => None,
@@ -206,8 +194,10 @@ impl Controller {
                     .list_objects(&bucket, &prefix)
                     .await
                 {
-                    vm_copy.lock().await.push(S3Output::Objects(output));
-                    ev_tx_copy.send(()).await.expect("ev_tx_copy send error");
+                    ev_tx_copy
+                        .send(S3Output::Objects(output))
+                        .await
+                        .expect("ev_tx_copy send error");
                 } else {
                     // TODO: error 처리
                 }
