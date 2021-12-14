@@ -23,6 +23,18 @@ pub enum S3Item {
     Object(Object),
 }
 
+fn last_component(key_or_prefix: &str) -> String {
+    let last_component_impl =
+        |str: &str| str.split("/").into_iter().last().unwrap_or("").to_owned();
+
+    // case of prefix
+    if let Some(str) = key_or_prefix.strip_suffix("/") {
+        last_component_impl(str) + "/"
+    } else {
+        last_component_impl(key_or_prefix)
+    }
+}
+
 impl S3Item {
     pub fn get_type(&self) -> S3ItemType {
         match self {
@@ -37,7 +49,7 @@ impl S3Item {
             S3Item::CommonPrefix(d) => (
                 "PRE".to_owned(),
                 String::default(),
-                d.prefix().unwrap_or("").to_owned(),
+                last_component(d.prefix().unwrap_or("")),
             ),
 
             S3Item::Object(k) => (
@@ -45,7 +57,7 @@ impl S3Item {
                     .map(|m| m.fmt(Format::DateTime).unwrap_or_default())
                     .unwrap_or(String::default()),
                 ByteSize(k.size() as u64).to_string_as(true),
-                k.key().unwrap_or("").to_owned(),
+                last_component(k.key().unwrap_or("")),
             ),
             S3Item::Bucket(b) => {
                 let location = {
