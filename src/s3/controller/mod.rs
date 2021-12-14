@@ -1,12 +1,21 @@
 use eyre::Result;
 use std::sync::Arc;
 
-use crate::{
-    s3::S3Client,
+use super::{
+    client::S3Client,
     view_model::{S3ItemsViewModel, S3Output},
     S3Item,
 };
+use structopt::StructOpt;
 use tokio::sync::{mpsc::Sender, Mutex};
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "tui-s3", about = "tui for s3")]
+pub struct Opt {
+    /// Where to write the output: to `stdout` or `file`
+    #[structopt(short, help("s3 path to search"))]
+    s3_path: Option<String>,
+}
 
 pub struct S3ItemsViewModelController {
     // 컨트롤  대상

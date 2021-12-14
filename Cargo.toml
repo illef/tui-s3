@@ -19,3 +19,8 @@ futures = "0.3.15"
 bytesize = "1.0.1"
 strum = "0.21.0"
 strum_macros = "0.21.1"
+structopt = "0.3.25"
+
+[[bin]]
+name = "tui-s3"
+path = "src/s3/main.rs"

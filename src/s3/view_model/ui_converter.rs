@@ -1,11 +1,10 @@
-use strum::IntoEnumIterator;
 use tui::{
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{List, ListItem},
 };
 
-use crate::S3ItemType;
+use strum::IntoEnumIterator;
 
 use super::*;
 

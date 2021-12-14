@@ -17,7 +17,7 @@ use tui::{
     Terminal,
 };
 
-use crate::controller::S3ItemsViewModelController;
+use super::controller::S3ItemsViewModelController;
 
 pub async fn run_frontend() -> Result<()> {
     // setup terminal

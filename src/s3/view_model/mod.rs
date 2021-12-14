@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 use aws_sdk_s3::output::ListObjectsOutput;
 use tui::widgets::{List, ListState};
 
-use crate::{s3::BucketWithLocation, S3Item};
+pub use super::*;
+use super::{client::BucketWithLocation, S3Item};
 
 pub mod ui_converter;
 
@@ -265,7 +266,6 @@ impl<T> StatefulList<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::S3Item;
 
     use aws_sdk_s3::{
         model::{Bucket, BucketLocationConstraint, Object},
