@@ -1,13 +1,18 @@
 use eyre::Result;
 
-use tui_s3::s3::{frontend::run_frontend, Opt};
+use structopt::StructOpt;
+use tui_s3::s3::{
+    controller::{Controller, Opt},
+    frontend::run_frontend,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // let opt = Opt::from_args();
+    let opt = Opt::from_args();
 
     let ui_task = tokio::task::spawn(async move {
-        run_frontend().await.expect("frontend error");
+        let controller = Controller::new(opt).await.expect("TODO: error handle");
+        run_frontend(controller).await.expect("frontend error");
     });
 
     ui_task.await?;

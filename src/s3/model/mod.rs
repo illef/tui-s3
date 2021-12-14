@@ -11,16 +11,16 @@ use client::BucketWithLocation;
 pub enum S3ItemType {
     Pop,
     Bucket,
-    Directory,
-    Key,
+    CommonPrefix,
+    Object,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum S3Item {
     Pop, //상위 디렉토리를 가리키는 객체
     Bucket(BucketWithLocation),
-    Directory(CommonPrefix),
-    Key(Object),
+    CommonPrefix(CommonPrefix),
+    Object(Object),
 }
 
 impl S3Item {
@@ -28,19 +28,19 @@ impl S3Item {
         match self {
             S3Item::Pop => S3ItemType::Pop,
             S3Item::Bucket(_) => S3ItemType::Bucket,
-            S3Item::Directory(_) => S3ItemType::Directory,
-            S3Item::Key(_) => S3ItemType::Key,
+            S3Item::CommonPrefix(_) => S3ItemType::CommonPrefix,
+            S3Item::Object(_) => S3ItemType::Object,
         }
     }
     pub fn as_row(&self) -> (String, String, String) {
         match self {
-            S3Item::Directory(d) => (
+            S3Item::CommonPrefix(d) => (
                 "PRE".to_owned(),
                 String::default(),
                 d.prefix().unwrap_or("").to_owned(),
             ),
 
-            S3Item::Key(k) => (
+            S3Item::Object(k) => (
                 k.last_modified()
                     .map(|m| m.fmt(Format::DateTime).unwrap_or_default())
                     .unwrap_or(String::default()),
@@ -72,12 +72,12 @@ impl From<BucketWithLocation> for S3Item {
 
 impl From<CommonPrefix> for S3Item {
     fn from(common_prefix: CommonPrefix) -> Self {
-        S3Item::Directory(common_prefix)
+        S3Item::CommonPrefix(common_prefix)
     }
 }
 
 impl From<Object> for S3Item {
     fn from(object: Object) -> Self {
-        S3Item::Key(object)
+        S3Item::Object(object)
     }
 }

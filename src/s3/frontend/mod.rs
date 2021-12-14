@@ -10,16 +10,12 @@ use crossterm::{
 use std::{io, time::Duration};
 use tui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    text::{Span, Text},
-    widgets::Paragraph,
     Terminal,
 };
 
-use super::controller::S3ItemsViewModelController;
+use super::controller::Controller;
 
-pub async fn run_frontend() -> Result<()> {
+pub async fn run_frontend(controller: Controller) -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -27,7 +23,7 @@ pub async fn run_frontend() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal).await;
+    let res = run_app(&mut terminal, controller).await;
 
     // restore terminal
     disable_raw_mode()?;
@@ -65,10 +61,7 @@ enum EventAction {
     Exit,
 }
 
-async fn handle_event(
-    event: Option<Event>,
-    controller: &mut S3ItemsViewModelController,
-) -> EventAction {
+async fn handle_event(event: Option<Event>, controller: &mut Controller) -> EventAction {
     if let Some(event) = event {
         match event {
             Event::Key(key) => match (key.code, key.modifiers) {
@@ -96,45 +89,17 @@ async fn handle_event(
     }
 }
 
-async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> Result<()> {
+async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut controller: Controller) -> Result<()> {
     let (tx, mut event_rx) = channel::<Event>(10);
-    let (ev_tx, mut update_rx) = channel::<()>(10);
 
-    let mut controller = S3ItemsViewModelController::new(ev_tx).await?;
-    controller.refresh().await;
-
+    let mut update_rx = controller.take_event_receiver();
     let (exit_tx, exit_rx) = std::sync::mpsc::channel();
 
     // crossterm 으로 부터 이벤트를 받는다
     let key_event_sender = run_key_event_sender(tx, exit_rx);
 
     'ui: loop {
-        let selected_s3_uri = controller.view_model().lock().await.selected_s3_uri();
-        if let Some((widget, state)) = controller.view_model().lock().await.make_view() {
-            terminal.draw(|f| {
-                let rect = f.size();
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(rect.height - 1), Constraint::Min(1)].as_ref())
-                    .split(f.size());
-
-                let lines = Text::from(Span::styled(
-                    selected_s3_uri,
-                    Style::default().fg(Color::Yellow),
-                ));
-                let paragraph = Paragraph::new(lines).style(Style::default());
-
-                f.render_stateful_widget(
-                    widget,
-                    chunks[0], //list_view
-                    &mut state.lock().expect("state lock fail"),
-                );
-                f.render_widget(
-                    paragraph, chunks[1], //list_view
-                );
-            })?;
-        }
-
+        controller.draw(terminal).await?;
         'event: loop {
             tokio::select! {
                 // Key Code 이벤트 처리

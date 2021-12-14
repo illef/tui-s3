@@ -122,14 +122,14 @@ impl S3ItemsViewModel {
     pub fn selected_s3_uri(&self) -> String {
         match self.selected() {
             Some(S3Item::Bucket(b)) => format!("s3://{}", b.bucket.name().as_ref().unwrap_or(&"")),
-            Some(S3Item::Directory(d)) => {
+            Some(S3Item::CommonPrefix(d)) => {
                 if let Some((bucket, _)) = self.bucket_and_prefix() {
                     format!("s3://{}/{}", bucket, d.prefix().as_ref().unwrap_or(&""))
                 } else {
                     String::default()
                 }
             }
-            Some(S3Item::Key(k)) => {
+            Some(S3Item::Object(k)) => {
                 if let Some((bucket, _)) = self.bucket_and_prefix() {
                     format!("s3://{}/{}", bucket, k.key().as_ref().unwrap_or(&""))
                 } else {
@@ -352,6 +352,6 @@ mod tests {
             .map(|b| b[0].to_owned())
             .unwrap();
 
-        assert_eq!(vm.selected(), Some(&S3Item::Key(expect_selected)));
+        assert_eq!(vm.selected(), Some(&S3Item::Object(expect_selected)));
     }
 }
