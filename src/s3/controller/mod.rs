@@ -9,11 +9,11 @@ use tui::{
     Terminal,
 };
 
-use crossterm::event::{Event as TerminalEvent, KeyCode, KeyModifiers};
+use crossterm::event::{Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
 
 use super::{
     client::S3Client,
-    frontend::EventAction,
+    frontend::{EventAction, FrontendEvent},
     view_model::{S3ItemsViewModel, S3Output},
     S3Item, S3ItemType,
 };
@@ -103,7 +103,7 @@ mod tests {
 #[derive(Debug)]
 pub enum Event {
     ClientEvent(S3Output),
-    TerminalEvent(TerminalEvent),
+    KeyEvent(FrontendEvent),
 }
 
 pub struct Controller {
@@ -114,6 +114,7 @@ pub struct Controller {
     ev_tx: Sender<S3Output>,
     // 후에 UI 쓰레드가 이 Receiver를 가져가게 된다
     ev_rx: Option<Receiver<S3Output>>,
+    key_events: Vec<KeyEvent>,
 }
 
 impl Controller {
@@ -125,6 +126,7 @@ impl Controller {
             client: Arc::new(Mutex::new(S3Client::new().await?)),
             ev_tx,
             ev_rx: Some(ev_rx),
+            key_events: Default::default(),
         };
 
         controller.init(opt).await?;
@@ -216,32 +218,57 @@ impl Controller {
                 self.vm.push(s3output);
                 EventAction::NeedReDraw
             }
-            Event::TerminalEvent(terminal_event) => match terminal_event {
-                TerminalEvent::Key(key) => match (key.code, key.modifiers) {
-                    (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
-                    (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
-                        self.vm.last();
-                        EventAction::NeedReDraw
+            Event::KeyEvent(key_event) => match key_event {
+                FrontendEvent::Tick => {
+                    self.key_events.clear();
+                    EventAction::NoNeedReDraw
+                }
+                FrontendEvent::TerminalEvent(terminal_event) => match terminal_event {
+                    TerminalEvent::Key(key) => {
+                        let last_key_event = self.key_events.last().map(|e| e.to_owned());
+                        self.key_events.push(key);
+                        match (key.code, key.modifiers) {
+                            (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
+                            (KeyCode::Char('g'), KeyModifiers::NONE) => {
+                                if let Some(key) = last_key_event.as_ref() {
+                                    if key.code == KeyCode::Char('g')
+                                        && key.modifiers == KeyModifiers::NONE
+                                    {
+                                        self.vm.first();
+                                        // gg pressed
+                                        EventAction::NeedReDraw
+                                    } else {
+                                        EventAction::NoNeedReDraw
+                                    }
+                                } else {
+                                    EventAction::NoNeedReDraw
+                                }
+                            }
+                            (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
+                                self.vm.last();
+                                EventAction::NeedReDraw
+                            }
+                            (KeyCode::Down, KeyModifiers::NONE)
+                            | (KeyCode::Char('j'), KeyModifiers::NONE) => {
+                                self.vm.next();
+                                EventAction::NeedReDraw
+                            }
+                            (KeyCode::Up, KeyModifiers::NONE)
+                            | (KeyCode::Char('k'), KeyModifiers::NONE) => {
+                                self.vm.previous();
+                                EventAction::NeedReDraw
+                            }
+                            (KeyCode::Enter, KeyModifiers::NONE) => {
+                                self.enter().await;
+                                EventAction::NeedReDraw
+                            }
+                            (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
+                            _ => EventAction::NoNeedReDraw,
+                        }
                     }
-                    (KeyCode::Down, KeyModifiers::NONE)
-                    | (KeyCode::Char('j'), KeyModifiers::NONE) => {
-                        self.vm.next();
-                        EventAction::NeedReDraw
-                    }
-                    (KeyCode::Up, KeyModifiers::NONE)
-                    | (KeyCode::Char('k'), KeyModifiers::NONE) => {
-                        self.vm.previous();
-                        EventAction::NeedReDraw
-                    }
-                    (KeyCode::Enter, KeyModifiers::NONE) => {
-                        self.enter().await;
-                        EventAction::NeedReDraw
-                    }
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
+                    TerminalEvent::Resize(_, _) => EventAction::NeedReDraw,
                     _ => EventAction::NoNeedReDraw,
                 },
-                TerminalEvent::Resize(_, _) => EventAction::NeedReDraw,
-                _ => EventAction::NoNeedReDraw,
             },
         }
     }

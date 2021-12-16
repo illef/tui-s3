@@ -38,21 +38,34 @@ pub async fn run_frontend(controller: Controller) -> Result<()> {
 }
 
 fn run_key_event_sender(
-    tx: tokio::sync::mpsc::Sender<TerminalEvent>,
+    tx: tokio::sync::mpsc::Sender<FrontendEvent>,
     exit_receiver: std::sync::mpsc::Receiver<()>,
 ) -> JoinHandle<Result<()>> {
     tokio::task::spawn_blocking(move || loop {
         if let Ok(_) = exit_receiver.try_recv() {
             return Ok(());
         }
-        if crossterm::event::poll(Duration::from_millis(100))? {
+        if crossterm::event::poll(Duration::from_millis(500))? {
             if let Ok(event) = event::read() {
-                if tx.blocking_send(event).is_err() {
+                if tx
+                    .blocking_send(FrontendEvent::TerminalEvent(event))
+                    .is_err()
+                {
                     return Ok(());
                 }
             }
+        } else {
+            if tx.blocking_send(FrontendEvent::Tick).is_err() {
+                return Ok(());
+            }
         }
     })
+}
+
+#[derive(Debug)]
+pub enum FrontendEvent {
+    Tick,
+    TerminalEvent(TerminalEvent),
 }
 
 pub enum EventAction {
@@ -62,7 +75,7 @@ pub enum EventAction {
 }
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut controller: Controller) -> Result<()> {
-    let (tx, mut event_rx) = channel::<TerminalEvent>(10);
+    let (tx, mut event_rx) = channel::<FrontendEvent>(10);
 
     let mut client_event_rx = controller.take_event_receiver();
     let (exit_tx, exit_rx) = std::sync::mpsc::channel();
@@ -74,7 +87,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut controller: Control
     loop {
         let event = tokio::select! {
             // Key Code 이벤트 처리
-            Some(event) = event_rx.recv() => Event::TerminalEvent(event),
+            Some(event) = event_rx.recv() => Event::KeyEvent(event),
             Some(s3_output) = client_event_rx.recv() => Event::ClientEvent(s3_output)
         };
 
