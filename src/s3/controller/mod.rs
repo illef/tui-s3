@@ -219,6 +219,10 @@ impl Controller {
             Event::TerminalEvent(terminal_event) => match terminal_event {
                 TerminalEvent::Key(key) => match (key.code, key.modifiers) {
                     (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
+                    (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
+                        self.vm.last();
+                        EventAction::NeedReDraw
+                    }
                     (KeyCode::Down, KeyModifiers::NONE)
                     | (KeyCode::Char('j'), KeyModifiers::NONE) => {
                         self.vm.next();
@@ -234,7 +238,7 @@ impl Controller {
                         EventAction::NeedReDraw
                     }
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
-                    _ => EventAction::Exit,
+                    _ => EventAction::NoNeedReDraw,
                 },
                 TerminalEvent::Resize(_, _) => EventAction::NeedReDraw,
                 _ => EventAction::NoNeedReDraw,

@@ -145,6 +145,14 @@ impl S3ItemsViewModel {
         }
     }
 
+    pub fn last(&mut self) {
+        if let Some(i) = self.item_stack.last_mut() {
+            if i.items.items.len() > 0 {
+                i.items.state.select(Some(i.items.items.len() - 1))
+            }
+        }
+    }
+
     pub fn next(&mut self) {
         if let Some(i) = self.item_stack.last_mut() {
             i.items.next();

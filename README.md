@@ -7,5 +7,5 @@
 - [ ] Delete
 - [ ] Refresh - Ctrl + r
 - [ ] gg - move to top
-- [ ] G - move to bottom
+- [x] G - move to bottom
 - [ ] Processing Spinner
