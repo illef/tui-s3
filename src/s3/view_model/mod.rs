@@ -180,12 +180,13 @@ impl S3ItemsViewModel {
         self.list_stack.push(S3ItemViewModel::new(s3_output));
     }
 
-    // 현재 보여지는 값을 전달된 s3_output으로 update한다
     pub fn update(&mut self, s3_output: S3Output) {
         let bucket_and_prefix = self.bucket_and_prefix();
         if let Some(item) = self.list_stack.last_mut() {
             if s3_output.bucket_and_prefix() == bucket_and_prefix {
                 item.update_output(s3_output);
+            } else {
+                self.push(s3_output);
             }
         } else {
             self.push(s3_output);

@@ -5,7 +5,7 @@
 - [ ] Multiple S3Bucket Window
 - [ ] Copy to another S3Bucket - c
 - [ ] Delete
-- [ ] Refresh - Ctrl + r
-- [ ] gg - move to top
+- [x] Refresh - Ctrl + r
+- [x] gg - move to top
 - [x] G - move to bottom
 - [ ] Processing Spinner

@@ -215,7 +215,7 @@ impl Controller {
     pub async fn handle_event(&mut self, event: Event) -> EventAction {
         match event {
             Event::ClientEvent(s3output) => {
-                self.vm.push(s3output);
+                self.vm.update(s3output);
                 EventAction::NeedReDraw
             }
             Event::KeyEvent(key_event) => match key_event {
@@ -247,6 +247,10 @@ impl Controller {
                             (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
                                 self.vm.last();
                                 EventAction::NeedReDraw
+                            }
+                            (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                                self.refresh().await;
+                                EventAction::NoNeedReDraw
                             }
                             (KeyCode::Down, KeyModifiers::NONE)
                             | (KeyCode::Char('j'), KeyModifiers::NONE) => {
@@ -307,6 +311,12 @@ impl Controller {
                 // TODO: error 처리
             }
         });
+    }
+
+    async fn refresh(&mut self) {
+        if let Some((bucket, prefix)) = self.vm.bucket_and_prefix() {
+            self.request_object_list(bucket, prefix).await;
+        }
     }
 
     async fn enter(&mut self) {
