@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use aws_sdk_s3::output::ListObjectsOutput;
 use tui::widgets::{List, ListState};
 
@@ -108,7 +106,7 @@ impl S3ItemViewModel {
 }
 
 pub struct S3ItemsViewModel {
-    item_stack: Vec<S3ItemViewModel>,
+    pub item_stack: Vec<S3ItemViewModel>,
 }
 
 impl S3ItemsViewModel {
@@ -159,8 +157,8 @@ impl S3ItemsViewModel {
         }
     }
 
-    pub fn pop(&mut self) {
-        self.item_stack.pop();
+    pub fn pop(&mut self) -> Option<S3ItemViewModel> {
+        self.item_stack.pop()
     }
 
     pub fn push(&mut self, s3_output: S3Output) {

@@ -1,11 +1,6 @@
 ## TODO
-- [ ] Bucket을 리스팅 할때 Bucket location을 함께 표시하기
-- [ ] ListItem 에 날짜 표시하기
-- [ ] 상단에 현재 선택된 S3 Object 주소, 상세 정보를 보여주기
 - [ ] 에러 처리 (e.g 권한이 없는 버킷 접근)
-- [ ] 상위 디렉토리 이동시 과거 선택한 디렉토리로 이동
 - [ ] Download to local - d
-- [ ] 파일 상세 정보 보여주기
 - [ ] 검색
 - [ ] Multiple S3Bucket Window
 - [ ] Copy to another S3Bucket - c

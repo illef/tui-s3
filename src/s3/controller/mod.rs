@@ -1,12 +1,12 @@
 use eyre::Result;
 use std::sync::Arc;
 use tui::{
-    backend::{Backend, CrosstermBackend},
+    backend::Backend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Span, Text},
-    widgets::{Block, BorderType, Borders, Paragraph},
-    Frame, Terminal,
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
 };
 
 use crossterm::event::{Event as TerminalEvent, KeyCode, KeyModifiers};
@@ -15,7 +15,7 @@ use super::{
     client::S3Client,
     frontend::EventAction,
     view_model::{S3ItemsViewModel, S3Output},
-    S3Item,
+    S3Item, S3ItemType,
 };
 use structopt::StructOpt;
 use tokio::sync::{
@@ -29,6 +29,75 @@ pub struct Opt {
     /// Where to write the output: to `stdout` or `file`
     #[structopt(short, help("s3 path to search"))]
     s3_path: Option<String>,
+}
+
+impl Opt {
+    // s3_path uri 를 String을 bucket, prefix 로 빼낸다
+    fn parse_s3_path(&self) -> Result<Option<(String, String)>> {
+        if let Some(s3_path) = &self.s3_path {
+            if let Some(str) = s3_path.strip_prefix("s3://") {
+                if let Some(i) = str.find("/") {
+                    let bucket = str[..i].to_owned();
+                    let prefix = str
+                        .strip_prefix(&(bucket.clone() + "/"))
+                        .unwrap()
+                        .to_owned();
+
+                    // key must be removed
+                    let prefix = if !prefix.ends_with("/") {
+                        if let Some(i) = prefix.rfind("/") {
+                            prefix[..i + 1].to_owned()
+                        } else {
+                            String::default()
+                        }
+                    } else {
+                        prefix
+                    };
+
+                    Ok(Some((bucket, prefix)))
+                } else {
+                    Ok(Some((str.to_owned(), String::default())))
+                }
+            } else {
+                Err(eyre::eyre!("s3_path must start with s3://"))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_s3_path() {
+        let make_opt = |s: &str| Opt {
+            s3_path: Some(s.to_owned()),
+        };
+
+        assert_eq!(
+            make_opt("s3://bucket/p1/p2/").parse_s3_path().unwrap(),
+            Some(("bucket".to_owned(), "p1/p2/".to_owned()))
+        );
+        assert_eq!(
+            make_opt("s3://bucket/p1/p2/k").parse_s3_path().unwrap(),
+            Some(("bucket".to_owned(), "p1/p2/".to_owned()))
+        );
+        assert_eq!(
+            make_opt("s3://bucket").parse_s3_path().unwrap(),
+            Some(("bucket".to_owned(), "".to_owned()))
+        );
+        assert_eq!(
+            make_opt("s3://bucket/").parse_s3_path().unwrap(),
+            Some(("bucket".to_owned(), "".to_owned()))
+        );
+        assert_eq!(
+            make_opt("s3://bucket/key").parse_s3_path().unwrap(),
+            Some(("bucket".to_owned(), "".to_owned()))
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -126,8 +195,18 @@ impl Controller {
     }
 
     pub async fn init(&mut self, opt: Opt) -> Result<()> {
-        let output = self.client.lock().await.list_buckets().await?;
-        self.vm.push(S3Output::Buckets(output));
+        let output = if let Some((bucket, prefix)) = opt.parse_s3_path()? {
+            S3Output::Objects(
+                self.client
+                    .lock()
+                    .await
+                    .list_objects(&bucket, &prefix)
+                    .await?,
+            )
+        } else {
+            S3Output::Buckets(self.client.lock().await.list_buckets().await?)
+        };
+        self.vm.push(output);
         Ok(())
     }
 
@@ -140,15 +219,17 @@ impl Controller {
             Event::TerminalEvent(terminal_event) => match terminal_event {
                 TerminalEvent::Key(key) => match (key.code, key.modifiers) {
                     (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
-                    (KeyCode::Down, _) => {
+                    (KeyCode::Down, KeyModifiers::NONE)
+                    | (KeyCode::Char('j'), KeyModifiers::NONE) => {
                         self.vm.next();
                         EventAction::NeedReDraw
                     }
-                    (KeyCode::Up, _) => {
+                    (KeyCode::Up, KeyModifiers::NONE)
+                    | (KeyCode::Char('k'), KeyModifiers::NONE) => {
                         self.vm.previous();
                         EventAction::NeedReDraw
                     }
-                    (KeyCode::Enter, _) => {
+                    (KeyCode::Enter, KeyModifiers::NONE) => {
                         self.enter().await;
                         EventAction::NeedReDraw
                     }
@@ -161,16 +242,70 @@ impl Controller {
         }
     }
 
+    async fn request_bucket_list(&self) {
+        let client_copy = self.client.clone();
+        let ev_tx_copy = self.ev_tx.clone();
+        tokio::spawn(async move {
+            if let Ok(output) = client_copy.lock().await.list_buckets().await {
+                ev_tx_copy
+                    .send(S3Output::Buckets(output))
+                    .await
+                    .expect("ev_tx_copy send error");
+            } else {
+                // TODO: error 처리
+            }
+        });
+    }
+
+    async fn request_object_list(&self, bucket: String, prefix: String) {
+        let client_copy = self.client.clone();
+        let ev_tx_copy = self.ev_tx.clone();
+
+        tokio::spawn(async move {
+            if let Ok(output) = client_copy
+                .lock()
+                .await
+                .list_objects(&bucket, &prefix)
+                .await
+            {
+                ev_tx_copy
+                    .send(S3Output::Objects(output))
+                    .await
+                    .expect("ev_tx_copy send error");
+            } else {
+                // TODO: error 처리
+            }
+        });
+    }
+
     async fn enter(&mut self) {
         let item = self.vm.selected();
-        let ev_tx_copy = self.ev_tx.clone();
-        let client_copy = self.client.clone();
+
+        if let Some(s3_item_type) = item.as_ref().map(|i| i.get_type()) {
+            if s3_item_type == S3ItemType::Pop {
+                if let Some(i) = self.vm.pop() {
+                    if self.vm.item_stack.len() == 0 {
+                        if let Some((bucket, prefix)) = i.output().bucket_and_prefix() {
+                            let mut components: Vec<_> = prefix.split("/").collect();
+                            components.pop();
+                            components.pop();
+                            let mut prefix = components.join("/");
+                            if prefix.is_empty() {
+                                self.request_bucket_list().await;
+                            } else {
+                                if !prefix.ends_with("/") {
+                                    prefix.push('/')
+                                }
+                                self.request_object_list(bucket, prefix).await;
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+        }
 
         let bucket_and_prefix = match item {
-            Some(S3Item::Pop) => {
-                self.vm.pop();
-                None
-            }
             Some(S3Item::Bucket(bucket_with_location)) => Some((
                 bucket_with_location
                     .bucket
@@ -187,21 +322,7 @@ impl Controller {
         };
 
         if let Some((bucket, prefix)) = bucket_and_prefix {
-            tokio::spawn(async move {
-                if let Ok(output) = client_copy
-                    .lock()
-                    .await
-                    .list_objects(&bucket, &prefix)
-                    .await
-                {
-                    ev_tx_copy
-                        .send(S3Output::Objects(output))
-                        .await
-                        .expect("ev_tx_copy send error");
-                } else {
-                    // TODO: error 처리
-                }
-            });
+            self.request_object_list(bucket, prefix).await;
         }
     }
 }

@@ -3,7 +3,7 @@ use eyre::Result;
 use tokio::{sync::mpsc::channel, task::JoinHandle};
 
 use crossterm::{
-    event::{self, Event as TerminalEvent, KeyCode, KeyModifiers},
+    event::{self, Event as TerminalEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
