@@ -288,7 +288,7 @@ impl Controller {
         if let Some(s3_item_type) = item.as_ref().map(|i| i.get_type()) {
             if s3_item_type == S3ItemType::Pop {
                 if let Some(i) = self.vm.pop() {
-                    if self.vm.item_stack.len() == 0 {
+                    if self.vm.list_stack.len() == 0 {
                         if let Some((bucket, prefix)) = i.output().bucket_and_prefix() {
                             let mut components: Vec<_> = prefix.split("/").collect();
                             components.pop();

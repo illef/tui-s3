@@ -40,13 +40,13 @@ impl S3Output {
 }
 
 pub struct S3ItemViewModel {
-    items: StatefulList<S3Item>,
+    list: StatefulList<S3Item>,
     output: S3Output,
 }
 
 impl S3ItemViewModel {
     fn items(&self) -> &StatefulList<S3Item> {
-        &self.items
+        &self.list
     }
 
     fn make_s3_item_from_buckets(output: &Vec<BucketWithLocation>) -> Vec<S3Item> {
@@ -84,15 +84,14 @@ impl S3ItemViewModel {
 
     pub fn new(s3_output: S3Output) -> Self {
         Self {
-            items: StatefulList::new(Self::make_s3_item_from_output(&s3_output)),
+            list: StatefulList::new(Self::make_s3_item_from_output(&s3_output)),
             output: s3_output,
         }
     }
 
     pub fn update_output(&mut self, s3_output: S3Output) {
         assert_eq!(self.output.output_type(), s3_output.output_type());
-        self.items
-            .update(Self::make_s3_item_from_output(&s3_output));
+        self.list.update(Self::make_s3_item_from_output(&s3_output));
         self.output = s3_output;
     }
 
@@ -101,26 +100,26 @@ impl S3ItemViewModel {
     }
 
     pub fn selected(&self) -> Option<&S3Item> {
-        self.items.selected()
+        self.list.selected()
     }
 }
 
 pub struct S3ItemsViewModel {
-    pub item_stack: Vec<S3ItemViewModel>,
+    pub list_stack: Vec<S3ItemViewModel>,
 }
 
 impl S3ItemsViewModel {
     pub fn new() -> Self {
-        Self { item_stack: vec![] }
+        Self { list_stack: vec![] }
     }
 
     pub fn make_view(&self) -> Option<(List<'static>, ListState)> {
-        self.item_stack.last().map(|i| i.into())
+        self.list_stack.last().map(|i| i.into())
     }
 
     pub fn reset_state(&mut self, state: ListState) {
-        if let Some(item) = self.item_stack.last_mut() {
-            item.items.state = state;
+        if let Some(item) = self.list_stack.last_mut() {
+            item.list.state = state;
         }
     }
 
@@ -146,37 +145,45 @@ impl S3ItemsViewModel {
     }
 
     pub fn last(&mut self) {
-        if let Some(i) = self.item_stack.last_mut() {
-            if i.items.items.len() > 0 {
-                i.items.state.select(Some(i.items.items.len() - 1))
+        if let Some(i) = self.list_stack.last_mut() {
+            if i.list.items.len() > 0 {
+                i.list.state.select(Some(i.list.items.len() - 1))
+            }
+        }
+    }
+
+    pub fn first(&mut self) {
+        if let Some(i) = self.list_stack.last_mut() {
+            if i.list.items.len() > 0 {
+                i.list.state.select(Some(0))
             }
         }
     }
 
     pub fn next(&mut self) {
-        if let Some(i) = self.item_stack.last_mut() {
-            i.items.next();
+        if let Some(i) = self.list_stack.last_mut() {
+            i.list.next();
         }
     }
 
     pub fn previous(&mut self) {
-        if let Some(i) = self.item_stack.last_mut() {
-            i.items.previous();
+        if let Some(i) = self.list_stack.last_mut() {
+            i.list.previous();
         }
     }
 
     pub fn pop(&mut self) -> Option<S3ItemViewModel> {
-        self.item_stack.pop()
+        self.list_stack.pop()
     }
 
     pub fn push(&mut self, s3_output: S3Output) {
-        self.item_stack.push(S3ItemViewModel::new(s3_output));
+        self.list_stack.push(S3ItemViewModel::new(s3_output));
     }
 
     // 현재 보여지는 값을 전달된 s3_output으로 update한다
     pub fn update(&mut self, s3_output: S3Output) {
         let bucket_and_prefix = self.bucket_and_prefix();
-        if let Some(item) = self.item_stack.last_mut() {
+        if let Some(item) = self.list_stack.last_mut() {
             if s3_output.bucket_and_prefix() == bucket_and_prefix {
                 item.update_output(s3_output);
             }
@@ -186,11 +193,11 @@ impl S3ItemsViewModel {
     }
 
     pub fn selected(&self) -> Option<&S3Item> {
-        self.item_stack.last().map(|i| i.selected()).flatten()
+        self.list_stack.last().map(|i| i.selected()).flatten()
     }
 
     pub fn bucket_and_prefix(&self) -> Option<(String, String)> {
-        self.item_stack
+        self.list_stack
             .last()
             .map(|i| i.output().bucket_and_prefix())
             .flatten()
