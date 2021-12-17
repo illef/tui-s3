@@ -113,6 +113,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-glue"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8461146433ba727a4c352340bb3691d262c0b631397ce19fbeea6b53224a1046"
+dependencies = [
+ "aws-endpoint",
+ "aws-http",
+ "aws-hyper",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "http",
+]
+
+[[package]]
 name = "aws-sdk-s3"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1436,6 +1456,7 @@ name = "tui-aws"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-sdk-glue",
  "aws-sdk-s3",
  "aws-smithy-types",
  "bytesize",
