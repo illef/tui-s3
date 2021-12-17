@@ -6,6 +6,7 @@ use eyre::Result;
 use tokio::sync::mpsc::Receiver;
 
 use crossterm::event::{Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
+use tui::layout::{Constraint, Direction, Layout};
 
 pub struct Controller {
     vm: ViewModel,
@@ -26,9 +27,17 @@ impl Controller {
 #[async_trait]
 impl App for Controller {
     fn draw(&mut self, terminal: &mut CrosstermTerminal) -> Result<()> {
-        let (list, mut state) = self.vm.make_list();
+        let (list, mut state) = self.vm.make_list_view();
+        let detail_view = self.vm.make_detail_view();
         terminal.draw(|f| {
-            f.render_stateful_widget(list, f.size(), &mut state);
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+                .split(f.size());
+            f.render_stateful_widget(list, chunks[0], &mut state);
+            if let Some(detail_view) = detail_view {
+                f.render_widget(detail_view, chunks[1]);
+            }
         })?;
         self.vm.reset_state(state);
         Ok(())

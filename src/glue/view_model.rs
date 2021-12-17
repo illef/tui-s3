@@ -37,7 +37,57 @@ impl ViewModel {
         self.list.state = state;
     }
 
-    pub fn make_list<'a>(&'a self) -> (List<'a>, ListState) {
+    pub fn make_detail_view<'a>(&'a self) -> Option<List<'a>> {
+        if let Some(columns) = self
+            .list
+            .selected()
+            .map(|gt| gt.table.storage_descriptor())
+            .flatten()
+            .map(|st| st.columns())
+            .flatten()
+        {
+            let names: Vec<_> = columns
+                .iter()
+                .map(|i| *i.name().as_ref().unwrap_or(&""))
+                .collect();
+            let types: Vec<_> = columns
+                .iter()
+                .map(|i| *i.r#type().as_ref().unwrap_or(&""))
+                .collect();
+            if let Some(max_name_len) = names
+                .iter()
+                .max_by(|x, y| x.len().cmp(&y.len()))
+                .map(|max_str| max_str.len())
+            {
+                let list_items: Vec<_> = names
+                    .iter()
+                    .zip(types.iter())
+                    .map(|(name, type_)| {
+                        let padding = std::iter::repeat(" ")
+                            .take(max_name_len - name.len())
+                            .fold(String::new(), |f, s| f + s);
+
+                        ListItem::new(Spans::from(vec![
+                            Span::styled(
+                                (*name).to_owned() + &padding,
+                                Style::default().fg(Color::White),
+                            ),
+                            Span::styled(" : ", Style::default().fg(Color::White)),
+                            Span::styled(*type_, Style::default().fg(Color::Yellow)),
+                        ]))
+                    })
+                    .collect();
+
+                Some(List::new(list_items))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn make_list_view<'a>(&'a self) -> (List<'a>, ListState) {
         let list_state = self.list.state();
         let glue_tables = self.list.items();
 
