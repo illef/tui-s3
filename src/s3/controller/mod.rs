@@ -112,8 +112,7 @@ pub struct Controller {
     client: Arc<Mutex<S3Client>>,
     // UI를 다시 그릴것을 요청하기 위한 sender
     ev_tx: Sender<S3Output>,
-    // 후에 UI 쓰레드가 이 Receiver를 가져가게 된다
-    ev_rx: Option<Receiver<S3Output>>,
+    ev_rx: Receiver<S3Output>,
     key_events: Vec<KeyEvent>,
 }
 
@@ -125,7 +124,7 @@ impl Controller {
             // TODO: 에러 처리
             client: Arc::new(Mutex::new(S3Client::new().await?)),
             ev_tx,
-            ev_rx: Some(ev_rx),
+            ev_rx,
             key_events: Default::default(),
         };
 
@@ -192,10 +191,6 @@ impl Controller {
         Ok(())
     }
 
-    pub fn take_event_receiver(&mut self) -> Receiver<S3Output> {
-        self.ev_rx.take().unwrap()
-    }
-
     pub async fn init(&mut self, opt: Opt) -> Result<()> {
         let output = if let Some((bucket, prefix)) = opt.parse_s3_path()? {
             S3Output::Objects(
@@ -212,7 +207,20 @@ impl Controller {
         Ok(())
     }
 
-    pub async fn handle_event(&mut self, event: Event) -> EventAction {
+    pub async fn handle_front_event(
+        &mut self,
+        frontenv_event_rx: &mut Receiver<FrontendEvent>,
+    ) -> EventAction {
+        let event = tokio::select! {
+            // Key Code 이벤트 처리
+            Some(frontend_event) = frontenv_event_rx.recv() => Event::KeyEvent(frontend_event),
+            Some(s3_output) = self.ev_rx.recv() => Event::ClientEvent(s3_output)
+        };
+
+        self.handle_event(event).await
+    }
+
+    async fn handle_event(&mut self, event: Event) -> EventAction {
         match event {
             Event::ClientEvent(s3output) => {
                 self.vm.update(s3output);
