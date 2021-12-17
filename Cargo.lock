@@ -21,6 +21,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "061a7acccaa286c011ddc30970520b98fa40e00c9d644633fb26b5fc63a265e3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -110,6 +121,26 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+]
+
+[[package]]
+name = "aws-sdk-glue"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8461146433ba727a4c352340bb3691d262c0b631397ce19fbeea6b53224a1046"
+dependencies = [
+ "aws-endpoint",
+ "aws-http",
+ "aws-hyper",
+ "aws-sig-auth",
+ "aws-smithy-async",
+ "aws-smithy-client",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "http",
 ]
 
 [[package]]
@@ -1432,10 +1463,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "tui-s3"
+name = "tui-aws"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "aws-config",
+ "aws-sdk-glue",
  "aws-sdk-s3",
  "aws-smithy-types",
  "bytesize",

@@ -1,21 +1,43 @@
+use async_trait::async_trait;
 use eyre::Result;
 
-use tokio::{sync::mpsc::channel, task::JoinHandle};
+use tokio::{
+    sync::mpsc::{channel, Receiver},
+    task::JoinHandle,
+};
 
 use crossterm::{
     event::{self, Event as TerminalEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{io, time::Duration};
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    Terminal,
+use std::{
+    io::{self, Stdout},
+    time::Duration,
 };
+use tui::{backend::CrosstermBackend, Terminal};
 
-use super::controller::{Controller, Event};
+pub type CrosstermTerminal = Terminal<CrosstermBackend<Stdout>>;
 
-pub async fn run_frontend(controller: Controller) -> Result<()> {
+#[async_trait]
+pub trait App {
+    fn draw(&mut self, _: &mut CrosstermTerminal) -> Result<()>;
+    async fn handle_front_event(&mut self, _: &mut Receiver<FrontendEvent>) -> EventAction;
+}
+
+#[derive(Debug)]
+pub enum FrontendEvent {
+    Tick,
+    TerminalEvent(TerminalEvent),
+}
+
+pub enum EventAction {
+    NeedReDraw,
+    NoNeedReDraw,
+    Exit,
+}
+
+pub async fn run_frontend<F: App>(controller: F) -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -34,6 +56,32 @@ pub async fn run_frontend(controller: Controller) -> Result<()> {
         println!("{:?}", err)
     }
 
+    Ok(())
+}
+
+async fn run_app<F: App>(terminal: &mut CrosstermTerminal, mut controller: F) -> Result<()> {
+    let (tx, mut event_rx) = channel::<FrontendEvent>(10);
+
+    let (exit_tx, exit_rx) = std::sync::mpsc::channel();
+
+    // crossterm 으로 부터 key 이벤트를 받는다
+    let key_event_sender = run_key_event_sender(tx, exit_rx);
+
+    controller.draw(terminal)?;
+    loop {
+        match controller.handle_front_event(&mut event_rx).await {
+            EventAction::Exit => {
+                break;
+            }
+            EventAction::NeedReDraw => {
+                controller.draw(terminal)?;
+            }
+            _ => {}
+        }
+    }
+
+    exit_tx.send(())?;
+    key_event_sender.await??;
     Ok(())
 }
 
@@ -60,49 +108,4 @@ fn run_key_event_sender(
             }
         }
     })
-}
-
-#[derive(Debug)]
-pub enum FrontendEvent {
-    Tick,
-    TerminalEvent(TerminalEvent),
-}
-
-pub enum EventAction {
-    NeedReDraw,
-    NoNeedReDraw,
-    Exit,
-}
-
-async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut controller: Controller) -> Result<()> {
-    let (tx, mut event_rx) = channel::<FrontendEvent>(10);
-
-    let mut client_event_rx = controller.take_event_receiver();
-    let (exit_tx, exit_rx) = std::sync::mpsc::channel();
-
-    // crossterm 으로 부터 이벤트를 받는다
-    let key_event_sender = run_key_event_sender(tx, exit_rx);
-
-    controller.draw(terminal)?;
-    loop {
-        let event = tokio::select! {
-            // Key Code 이벤트 처리
-            Some(event) = event_rx.recv() => Event::KeyEvent(event),
-            Some(s3_output) = client_event_rx.recv() => Event::ClientEvent(s3_output)
-        };
-
-        match controller.handle_event(event).await {
-            EventAction::Exit => {
-                break;
-            }
-            EventAction::NeedReDraw => {
-                controller.draw(terminal)?;
-            }
-            _ => {}
-        }
-    }
-
-    exit_tx.send(())?;
-    key_event_sender.await??;
-    Ok(())
 }

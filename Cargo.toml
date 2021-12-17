@@ -1,5 +1,5 @@
 [package]
-name = "tui-s3"
+name = "tui-aws"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 aws-config = "0.2.0"
 aws-sdk-s3 = "0.2.0"
+aws-sdk-glue = "0.2.0"
 aws-smithy-types = "0.32.0"
 futures-util = "0.3.17"
 tokio = { version = "1", features = ["full"] }
@@ -20,7 +21,12 @@ bytesize = "1.0.1"
 strum = "0.21.0"
 strum_macros = "0.21.1"
 structopt = "0.3.25"
+async-trait = "0.1.52"
 
 [[bin]]
 name = "tui-s3"
 path = "src/s3/main.rs"
+
+[[bin]]
+name = "tui-glue"
+path = "src/glue/main.rs"

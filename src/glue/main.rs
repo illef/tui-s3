@@ -1,20 +1,20 @@
 use eyre::Result;
 
-use structopt::StructOpt;
 use tui_aws::{
-    run_frontend,
-    s3::controller::{Controller, Opt},
+    frontend::run_frontend,
+    glue::{client::get_all_glue_tables, controller::Controller},
 };
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let opt = Opt::from_args();
-
+    // TODO: error handle
+    let glue_tables = get_all_glue_tables().await?;
+    let controller = Controller::new(glue_tables);
     let ui_task = tokio::task::spawn(async move {
-        let controller = Controller::new(opt).await.expect("TODO: error handle");
         run_frontend(controller).await.expect("frontend error");
     });
 
     ui_task.await?;
+
     Ok(())
 }

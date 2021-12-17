@@ -1,19 +1,19 @@
+use async_trait::async_trait;
 use eyre::Result;
 use std::sync::Arc;
 use tui::{
-    backend::Backend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Span, Text},
     widgets::{Block, Borders, Paragraph},
-    Terminal,
 };
 
 use crossterm::event::{Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
 
+use crate::{App, CrosstermTerminal, EventAction, FrontendEvent};
+
 use super::{
     client::S3Client,
-    frontend::{EventAction, FrontendEvent},
     view_model::{S3ItemsViewModel, S3Output},
     S3Item, S3ItemType,
 };
@@ -112,11 +112,9 @@ pub struct Controller {
     client: Arc<Mutex<S3Client>>,
     // UI를 다시 그릴것을 요청하기 위한 sender
     ev_tx: Sender<S3Output>,
-    // 후에 UI 쓰레드가 이 Receiver를 가져가게 된다
-    ev_rx: Option<Receiver<S3Output>>,
+    ev_rx: Receiver<S3Output>,
     key_events: Vec<KeyEvent>,
 }
-
 impl Controller {
     pub async fn new(opt: Opt) -> Result<Self> {
         let (ev_tx, ev_rx) = channel(100);
@@ -125,75 +123,13 @@ impl Controller {
             // TODO: 에러 처리
             client: Arc::new(Mutex::new(S3Client::new().await?)),
             ev_tx,
-            ev_rx: Some(ev_rx),
+            ev_rx,
             key_events: Default::default(),
         };
 
         controller.init(opt).await?;
 
         Ok(controller)
-    }
-
-    pub fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        let selected_s3_uri = self.vm.selected_s3_uri();
-        let bucket_and_prefix = self.vm.bucket_and_prefix();
-        let widget_and_state = self.vm.make_view();
-        if let Some((widget, mut state)) = widget_and_state {
-            terminal.draw(|f| {
-                let rect = f.size();
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints(
-                        [
-                            Constraint::Length(1),
-                            Constraint::Length(rect.height - 2),
-                            Constraint::Min(1),
-                        ]
-                        .as_ref(),
-                    )
-                    .split(f.size());
-
-                let current_search_target = if let Some((bucket, prefix)) = bucket_and_prefix {
-                    format!("s3://{}/{}    ", bucket, prefix)
-                } else {
-                    "bucket selection    ".to_owned()
-                };
-
-                let paragraph = Paragraph::new("")
-                    .style(Style::default().fg(Color::Cyan))
-                    .block(
-                        Block::default()
-                            .title(current_search_target)
-                            .borders(Borders::BOTTOM),
-                    );
-
-                f.render_widget(
-                    paragraph, chunks[0], //list_view
-                );
-
-                f.render_stateful_widget(
-                    widget, chunks[1], //list_view
-                    &mut state,
-                );
-
-                let lines = Text::from(Span::styled(
-                    selected_s3_uri,
-                    Style::default().fg(Color::Yellow),
-                ));
-
-                let paragraph = Paragraph::new(lines).style(Style::default());
-                f.render_widget(
-                    paragraph, chunks[2], //list_view
-                );
-            })?;
-
-            self.vm.reset_state(state);
-        }
-        Ok(())
-    }
-
-    pub fn take_event_receiver(&mut self) -> Receiver<S3Output> {
-        self.ev_rx.take().unwrap()
     }
 
     pub async fn init(&mut self, opt: Opt) -> Result<()> {
@@ -212,7 +148,7 @@ impl Controller {
         Ok(())
     }
 
-    pub async fn handle_event(&mut self, event: Event) -> EventAction {
+    async fn handle_event(&mut self, event: Event) -> EventAction {
         match event {
             Event::ClientEvent(s3output) => {
                 self.vm.update(s3output);
@@ -365,5 +301,79 @@ impl Controller {
         if let Some((bucket, prefix)) = bucket_and_prefix {
             self.request_object_list(bucket, prefix).await;
         }
+    }
+}
+
+#[async_trait]
+impl App for Controller {
+    fn draw(&mut self, terminal: &mut CrosstermTerminal) -> Result<()> {
+        let selected_s3_uri = self.vm.selected_s3_uri();
+        let bucket_and_prefix = self.vm.bucket_and_prefix();
+        let widget_and_state = self.vm.make_view();
+        if let Some((widget, mut state)) = widget_and_state {
+            terminal.draw(|f| {
+                let rect = f.size();
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints(
+                        [
+                            Constraint::Length(1),
+                            Constraint::Length(rect.height - 2),
+                            Constraint::Min(1),
+                        ]
+                        .as_ref(),
+                    )
+                    .split(f.size());
+
+                let current_search_target = if let Some((bucket, prefix)) = bucket_and_prefix {
+                    format!("s3://{}/{}    ", bucket, prefix)
+                } else {
+                    "bucket selection    ".to_owned()
+                };
+
+                let paragraph = Paragraph::new("")
+                    .style(Style::default().fg(Color::Cyan))
+                    .block(
+                        Block::default()
+                            .title(current_search_target)
+                            .borders(Borders::BOTTOM),
+                    );
+
+                f.render_widget(
+                    paragraph, chunks[0], //list_view
+                );
+
+                f.render_stateful_widget(
+                    widget, chunks[1], //list_view
+                    &mut state,
+                );
+
+                let lines = Text::from(Span::styled(
+                    selected_s3_uri,
+                    Style::default().fg(Color::Yellow),
+                ));
+
+                let paragraph = Paragraph::new(lines).style(Style::default());
+                f.render_widget(
+                    paragraph, chunks[2], //list_view
+                );
+            })?;
+
+            self.vm.reset_state(state);
+        }
+        Ok(())
+    }
+
+    async fn handle_front_event(
+        &mut self,
+        frontenv_event_rx: &mut Receiver<FrontendEvent>,
+    ) -> EventAction {
+        let event = tokio::select! {
+            // Key Code 이벤트 처리
+            Some(frontend_event) = frontenv_event_rx.recv() => Event::KeyEvent(frontend_event),
+            Some(s3_output) = self.ev_rx.recv() => Event::ClientEvent(s3_output)
+        };
+
+        self.handle_event(event).await
     }
 }
