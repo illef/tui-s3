@@ -1,7 +1,7 @@
 use eyre::Result;
 
 use structopt::StructOpt;
-use tui_s3::s3::{
+use tui_aws::s3::{
     controller::{Controller, Opt},
     frontend::run_frontend,
 };

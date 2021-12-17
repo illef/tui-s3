@@ -1,5 +1,5 @@
 [package]
-name = "tui-s3"
+name = "tui-aws"
 version = "0.1.0"
 edition = "2021"
 
@@ -24,3 +24,7 @@ structopt = "0.3.25"
 [[bin]]
 name = "tui-s3"
 path = "src/s3/main.rs"
+
+[[bin]]
+name = "tui-glue"
+path = "src/glue/main.rs"

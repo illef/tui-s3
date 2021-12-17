@@ -1432,7 +1432,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tui-s3"
+name = "tui-aws"
 version = "0.1.0"
 dependencies = [
  "aws-config",
