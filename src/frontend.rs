@@ -20,7 +20,7 @@ use tui::{backend::CrosstermBackend, Terminal};
 pub type CrosstermTerminal = Terminal<CrosstermBackend<Stdout>>;
 
 #[async_trait]
-pub trait FrontendHandler {
+pub trait App {
     fn draw(&mut self, _: &mut CrosstermTerminal) -> Result<()>;
     async fn handle_front_event(&mut self, _: &mut Receiver<FrontendEvent>) -> EventAction;
 }
@@ -37,7 +37,7 @@ pub enum EventAction {
     Exit,
 }
 
-pub async fn run_frontend<F: FrontendHandler>(controller: F) -> Result<()> {
+pub async fn run_frontend<F: App>(controller: F) -> Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -59,10 +59,7 @@ pub async fn run_frontend<F: FrontendHandler>(controller: F) -> Result<()> {
     Ok(())
 }
 
-async fn run_app<F: FrontendHandler>(
-    terminal: &mut CrosstermTerminal,
-    mut controller: F,
-) -> Result<()> {
+async fn run_app<F: App>(terminal: &mut CrosstermTerminal, mut controller: F) -> Result<()> {
     let (tx, mut event_rx) = channel::<FrontendEvent>(10);
 
     let (exit_tx, exit_rx) = std::sync::mpsc::channel();

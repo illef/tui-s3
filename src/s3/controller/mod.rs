@@ -10,7 +10,7 @@ use tui::{
 
 use crossterm::event::{Event as TerminalEvent, KeyCode, KeyEvent, KeyModifiers};
 
-use crate::{CrosstermTerminal, EventAction, FrontendEvent, FrontendHandler};
+use crate::{App, CrosstermTerminal, EventAction, FrontendEvent};
 
 use super::{
     client::S3Client,
@@ -305,7 +305,7 @@ impl Controller {
 }
 
 #[async_trait]
-impl FrontendHandler for Controller {
+impl App for Controller {
     fn draw(&mut self, terminal: &mut CrosstermTerminal) -> Result<()> {
         let selected_s3_uri = self.vm.selected_s3_uri();
         let bucket_and_prefix = self.vm.bucket_and_prefix();
