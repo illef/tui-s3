@@ -1,10 +1,13 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use aws_sdk_glue::model::{Database, Table};
 use eyre::Result;
 
 #[derive(Debug)]
-pub struct GlueTable(Rc<Database>, Table);
+pub struct GlueTable {
+    pub database: Arc<Database>,
+    pub table: Table,
+}
 
 pub async fn get_all_glue_tables() -> Result<Vec<GlueTable>> {
     let shared_config = aws_config::load_from_env().await;
@@ -30,10 +33,11 @@ pub async fn get_all_glue_tables() -> Result<Vec<GlueTable>> {
                     .map(|table_list| (database, table_list.to_owned()))
             })
             .map(|(database, table_list)| {
-                let database = Rc::new(database);
-                table_list
-                    .into_iter()
-                    .map(move |t| GlueTable(database.clone(), t))
+                let database = Arc::new(database);
+                table_list.into_iter().map(move |t| GlueTable {
+                    database: database.clone(),
+                    table: t,
+                })
             })
             .flatten()
             .collect())

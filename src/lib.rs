@@ -28,6 +28,17 @@ impl<T> StatefulList<T> {
         s
     }
 
+    fn first(&mut self) {
+        if !self.items.is_empty() {
+            self.state.select(Some(0));
+        }
+    }
+    fn last(&mut self) {
+        if !self.items.is_empty() {
+            self.state.select(Some(self.items.len() - 1));
+        }
+    }
+
     fn selected(&self) -> Option<&T> {
         self.state.selected().map(|i| &self.items[i])
     }
