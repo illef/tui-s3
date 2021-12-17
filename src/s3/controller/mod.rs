@@ -327,18 +327,18 @@ impl Controller {
                 if let Some(i) = self.vm.pop() {
                     if self.vm.list_stack.len() == 0 {
                         if let Some((bucket, prefix)) = i.output().bucket_and_prefix() {
+                            if prefix.is_empty() {
+                                self.request_bucket_list().await;
+                                return;
+                            }
                             let mut components: Vec<_> = prefix.split("/").collect();
                             components.pop();
                             components.pop();
                             let mut prefix = components.join("/");
-                            if prefix.is_empty() {
-                                self.request_bucket_list().await;
-                            } else {
-                                if !prefix.ends_with("/") {
-                                    prefix.push('/')
-                                }
-                                self.request_object_list(bucket, prefix).await;
+                            if !prefix.is_empty() {
+                                prefix.push('/');
                             }
+                            self.request_object_list(bucket, prefix).await;
                         }
                     }
                 }
