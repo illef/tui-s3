@@ -1,9 +1,9 @@
 use eyre::Result;
 
 use structopt::StructOpt;
-use tui_aws::s3::{
-    controller::{Controller, Opt},
-    frontend::run_frontend,
+use tui_aws::{
+    run_frontend,
+    s3::controller::{Controller, Opt},
 };
 
 #[tokio::main]

@@ -17,7 +17,7 @@ use std::{
 };
 use tui::{backend::CrosstermBackend, Terminal};
 
-type CrosstermTerminal = Terminal<CrosstermBackend<Stdout>>;
+pub type CrosstermTerminal = Terminal<CrosstermBackend<Stdout>>;
 
 #[async_trait]
 pub trait FrontendHandler {
