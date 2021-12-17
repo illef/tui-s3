@@ -9,7 +9,7 @@ edition = "2021"
 aws-config = "0.2.0"
 aws-sdk-s3 = "0.2.0"
 aws-smithy-types = "0.32.0"
-futures-util = "0.3.18"
+futures-util = "0.3.17"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6.9", features = ["full"] }
 tui = { version = "0.16", features = ["crossterm"], default-features = false }
