@@ -27,7 +27,7 @@ use tokio::sync::{
 #[structopt(name = "tui-s3", about = "tui for s3")]
 pub struct Opt {
     /// Where to write the output: to `stdout` or `file`
-    #[structopt(short, help("s3 path to search"))]
+    #[structopt(parse(from_str))]
     s3_path: Option<String>,
 }
 
