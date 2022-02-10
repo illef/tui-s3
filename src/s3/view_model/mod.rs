@@ -141,6 +141,13 @@ impl S3ItemsViewModel {
                     String::default()
                 }
             }
+            Some(S3Item::Pop) => {
+                if let Some((bucket, prefix)) = self.bucket_and_prefix() {
+                    format!("s3://{}/{}", bucket, prefix)
+                } else {
+                    String::default()
+                }
+            }
             _ => String::default(),
         }
     }

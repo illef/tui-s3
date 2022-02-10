@@ -23,6 +23,8 @@ use tokio::sync::{
     Mutex,
 };
 
+use copypasta::{ClipboardContext, ClipboardProvider};
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tui-s3", about = "tui for s3")]
 pub struct Opt {
@@ -114,6 +116,7 @@ pub struct Controller {
     ev_tx: Sender<S3Output>,
     ev_rx: Receiver<S3Output>,
     key_events: Vec<KeyEvent>,
+    clipboard_context: Arc<Mutex<ClipboardContext>>,
 }
 impl Controller {
     pub async fn new(opt: Opt) -> Result<Self> {
@@ -125,6 +128,7 @@ impl Controller {
             ev_tx,
             ev_rx,
             key_events: Default::default(),
+            clipboard_context: Arc::new(Mutex::new(ClipboardContext::new().unwrap())),
         };
 
         controller.init(opt).await?;
@@ -179,6 +183,14 @@ impl Controller {
                                 } else {
                                     EventAction::NoNeedReDraw
                                 }
+                            }
+                            (KeyCode::Char('y'), KeyModifiers::NONE) => {
+                                self.clipboard_context
+                                    .lock()
+                                    .await
+                                    .set_contents(self.vm.selected_s3_uri())
+                                    .unwrap();
+                                EventAction::NoNeedReDraw
                             }
                             (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
                                 self.vm.last();
