@@ -1,7 +1,6 @@
 use tui::widgets::ListState;
 
 pub mod frontend;
-pub mod glue;
 pub mod s3;
 
 pub use frontend::*;

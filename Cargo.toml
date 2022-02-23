@@ -28,6 +28,3 @@ copypasta = "0.7.1"
 name = "tui-s3"
 path = "src/s3/main.rs"
 
-[[bin]]
-name = "tui-glue"
-path = "src/glue/main.rs"
