@@ -251,13 +251,7 @@ impl Controller {
                                     self.search_next();
                                     EventAction::NeedReDraw
                                 }
-                                KeyCode::Esc => {
-                                    self.search_input.clear();
-                                    self.input_mode = InputMode::Normal;
-                                    EventAction::NeedReDraw
-                                }
-                                KeyCode::Enter => {
-                                    self.search_next();
+                                KeyCode::Esc | KeyCode::Enter => {
                                     self.input_mode = InputMode::Normal;
                                     EventAction::NeedReDraw
                                 }

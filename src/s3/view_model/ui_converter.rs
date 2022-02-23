@@ -60,7 +60,7 @@ impl Into<(List<'static>, ListState)> for &S3ItemViewModel {
         let items = List::new(list_items)
             .highlight_style(
                 Style::default()
-                    .bg(Color::Green)
+                    .bg(Color::White)
                     .fg(Color::Black)
                     .add_modifier(Modifier::BOLD),
             )
