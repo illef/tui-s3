@@ -403,10 +403,11 @@ impl App for Controller {
                 // selected_s3_uri_view
                 let selected_s3_uri_view = Text::from(Span::styled(
                     selected_s3_uri,
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(Color::Black),
                 ));
 
-                let paragraph = Paragraph::new(selected_s3_uri_view).style(Style::default());
+                let paragraph =
+                    Paragraph::new(selected_s3_uri_view).style(Style::default().bg(Color::Yellow));
                 f.render_widget(paragraph, chunks[2]);
 
                 // search input view
