@@ -3,7 +3,7 @@ use eyre::Result;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::{
     model::{Bucket, BucketLocationConstraint},
-    output::ListObjectsOutput,
+    output::ListObjectsV2Output,
     Client, Region,
 };
 pub struct S3Client {
@@ -53,10 +53,10 @@ impl S3Client {
         }
     }
 
-    pub async fn list_objects(&self, bucket: &str, prefix: &str) -> Result<ListObjectsOutput> {
+    pub async fn list_objects(&self, bucket: &str, prefix: &str) -> Result<ListObjectsV2Output> {
         let output = self
             .client
-            .list_objects()
+            .list_objects_v2()
             .bucket(bucket)
             .delimiter("/")
             .prefix(prefix)

@@ -1,4 +1,4 @@
-use aws_sdk_s3::output::ListObjectsOutput;
+use aws_sdk_s3::output::ListObjectsV2Output;
 use tui::widgets::{List, ListState};
 
 pub use super::*;
@@ -16,7 +16,7 @@ pub enum S3OutputType {
 #[derive(Debug)]
 pub enum S3Output {
     Buckets(Vec<BucketWithLocation>),
-    Objects(ListObjectsOutput),
+    Objects(ListObjectsV2Output),
 }
 
 impl S3Output {
@@ -57,7 +57,7 @@ impl S3ItemViewModel {
             .collect()
     }
 
-    fn make_s3_item_from_objects(output: &ListObjectsOutput) -> Vec<S3Item> {
+    fn make_s3_item_from_objects(output: &ListObjectsV2Output) -> Vec<S3Item> {
         std::iter::once(S3Item::Pop)
             .chain(
                 output
@@ -217,10 +217,7 @@ impl S3ItemsViewModel {
 mod tests {
     use super::*;
 
-    use aws_sdk_s3::{
-        model::{Bucket, BucketLocationConstraint, Object},
-        output::ListObjectsOutput,
-    };
+    use aws_sdk_s3::model::{Bucket, BucketLocationConstraint, Object};
 
     #[test]
     fn test_s3items_view_model() {
@@ -285,7 +282,7 @@ mod tests {
                 Object::builder().key("obj3").build(),
             ];
 
-            ListObjectsOutput::builder()
+            ListObjectsV2Output::builder()
                 .set_contents(Some(object_list))
                 .prefix("")
                 .build()
