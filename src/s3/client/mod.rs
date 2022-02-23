@@ -54,16 +54,45 @@ impl S3Client {
     }
 
     pub async fn list_objects(&self, bucket: &str, prefix: &str) -> Result<ListObjectsV2Output> {
-        let output = self
-            .client
-            .list_objects_v2()
-            .bucket(bucket)
-            .delimiter("/")
-            .prefix(prefix)
-            .send()
-            .await?;
+        let mut next_continuation_token: Option<String> = None;
+        let mut object_list = vec![];
+        let mut common_prefixes = vec![];
 
-        Ok(output)
+        loop {
+            let list_output = self
+                .client
+                .list_objects_v2()
+                .set_continuation_token(next_continuation_token.clone())
+                .bucket(bucket)
+                .delimiter("/")
+                .prefix(prefix)
+                .send()
+                .await?;
+
+            let (contents, prefixes, token) = (
+                list_output.contents,
+                list_output.common_prefixes,
+                list_output.next_continuation_token,
+            );
+
+            next_continuation_token = token;
+            if let Some(objects_vec) = contents {
+                object_list.extend(objects_vec);
+            }
+            if let Some(prefixes) = prefixes {
+                common_prefixes.extend(prefixes);
+            }
+            if next_continuation_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(ListObjectsV2Output::builder()
+            .set_contents(Some(object_list))
+            .name(bucket)
+            .prefix(prefix)
+            .set_common_prefixes(Some(common_prefixes))
+            .build())
     }
 
     pub async fn new() -> Result<S3Client> {
