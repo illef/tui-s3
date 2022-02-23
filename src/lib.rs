@@ -38,6 +38,10 @@ impl<T> StatefulList<T> {
         }
     }
 
+    fn selected_index(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
     fn selected(&self) -> Option<&T> {
         self.state.selected().map(|i| &self.items[i])
     }

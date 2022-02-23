@@ -225,22 +225,30 @@ impl Controller {
                                     self.enter().await;
                                     EventAction::NeedReDraw
                                 }
+                                (KeyCode::Char('n'), KeyModifiers::NONE) => {
+                                    self.search_next();
+                                    EventAction::NeedReDraw
+                                }
                                 (KeyCode::Char('/'), KeyModifiers::NONE) => {
                                     self.search_input = "/".to_owned();
                                     self.input_mode = InputMode::Search;
                                     EventAction::NeedReDraw
                                 }
                                 (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
-                                (KeyCode::Esc, _) => {
-                                    // TODO: Clear Search Result
-                                    EventAction::NeedReDraw
-                                }
                                 _ => EventAction::NoNeedReDraw,
                             }
                         } else {
                             match key.code {
+                                KeyCode::Backspace => {
+                                    if self.search_input.len() > 1 {
+                                        self.search_input.pop();
+                                    }
+                                    self.search_next();
+                                    EventAction::NeedReDraw
+                                }
                                 KeyCode::Char(c) => {
                                     self.search_input.push(c);
+                                    self.search_next();
                                     EventAction::NeedReDraw
                                 }
                                 KeyCode::Esc => {
@@ -249,8 +257,7 @@ impl Controller {
                                     EventAction::NeedReDraw
                                 }
                                 KeyCode::Enter => {
-                                    self.search(&self.search_input);
-                                    self.search_input.clear();
+                                    self.search_next();
                                     self.input_mode = InputMode::Normal;
                                     EventAction::NeedReDraw
                                 }
@@ -265,7 +272,11 @@ impl Controller {
         }
     }
 
-    fn search(&self, search_text: &str) {}
+    fn search_next(&mut self) {
+        if self.search_input.starts_with("/") {
+            self.vm.search_next(&self.search_input[1..]);
+        }
+    }
 
     async fn request_bucket_list(&self) {
         let client_copy = self.client.clone();

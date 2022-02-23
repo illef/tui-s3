@@ -36,6 +36,18 @@ fn last_component(key_or_prefix: &str) -> String {
 }
 
 impl S3Item {
+    pub fn is_matched(&self, search_text: &str) -> bool {
+        // TODO: use regex
+        match self {
+            S3Item::Pop => false,
+            S3Item::Bucket(b) => b.bucket.name().unwrap_or_default().contains(search_text),
+            S3Item::CommonPrefix(c) => {
+                last_component(c.prefix().unwrap_or("")).contains(search_text)
+            }
+            S3Item::Object(k) => last_component(k.key().unwrap_or("")).contains(search_text),
+        }
+    }
+
     pub fn get_type(&self) -> S3ItemType {
         match self {
             S3Item::Pop => S3ItemType::Pop,

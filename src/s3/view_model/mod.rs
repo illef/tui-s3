@@ -90,6 +90,33 @@ impl S3ItemViewModel {
         }
     }
 
+    pub fn search_next(&mut self, search_text: &str) {
+        let matched_indexes: Vec<_> = self
+            .list
+            .items()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, item)| {
+                if item.is_matched(search_text) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let next_matched = matched_indexes
+            .iter()
+            .filter(|i| **i > self.list.selected_index().unwrap_or_default())
+            .next();
+
+        let first_matched = matched_indexes.iter().next();
+
+        if let Some(i) = next_matched.or(first_matched).map(|i| *i) {
+            self.list.state.select(Some(i));
+        }
+    }
+
     pub fn update_output(&mut self, s3_output: S3Output) {
         assert_eq!(self.output.output_type(), s3_output.output_type());
         self.list.update(Self::make_s3_item_from_output(&s3_output));
@@ -116,6 +143,12 @@ impl S3ItemsViewModel {
 
     pub fn make_view(&self) -> Option<(List<'static>, ListState)> {
         self.list_stack.last().map(|i| i.into())
+    }
+
+    pub fn search_next(&mut self, search_text: &str) {
+        if let Some(item) = self.list_stack.last_mut() {
+            item.search_next(search_text);
+        }
     }
 
     pub fn reset_state(&mut self, state: ListState) {
