@@ -1,5 +1,9 @@
 use aws_sdk_s3::output::ListObjectsV2Output;
-use tui::widgets::{List, ListState};
+use tui::{
+    style::{Color, Style},
+    text::{Span, Text},
+    widgets::{Block, Borders, List, ListState, Paragraph},
+};
 
 pub use super::*;
 use super::{client::BucketWithLocation, S3Item};
@@ -141,7 +145,33 @@ impl S3ItemsViewModel {
         Self { list_stack: vec![] }
     }
 
-    pub fn make_view(&self) -> Option<(List<'static>, ListState)> {
+    pub fn make_selected_s3_item_view(&self) -> Paragraph {
+        // selected_s3_uri_view
+        let selected_s3_uri_view = Text::from(Span::styled(
+            self.selected_s3_uri(),
+            Style::default().fg(Color::Black),
+        ));
+
+        Paragraph::new(selected_s3_uri_view).style(Style::default().bg(Color::Yellow))
+    }
+
+    pub fn make_currenent_common_prefix_view(&self) -> Paragraph {
+        let current_search_target = if let Some((bucket, prefix)) = self.bucket_and_prefix() {
+            format!("s3://{}/{}    ", bucket, prefix)
+        } else {
+            "bucket selection    ".to_owned()
+        };
+
+        Paragraph::new("")
+            .style(Style::default().fg(Color::Cyan))
+            .block(
+                Block::default()
+                    .title(current_search_target)
+                    .borders(Borders::BOTTOM),
+            )
+    }
+
+    pub fn make_item_list_view(&self) -> Option<(List<'static>, ListState)> {
         self.list_stack.last().map(|i| i.into())
     }
 

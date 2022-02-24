@@ -162,6 +162,94 @@ impl Controller {
         Ok(())
     }
 
+    async fn handle_event_in_nomal_mode(
+        &mut self,
+        key: KeyEvent,
+        last_key_event: Option<KeyEvent>,
+    ) -> EventAction {
+        match (key.code, key.modifiers) {
+            (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
+            (KeyCode::Char('g'), KeyModifiers::NONE) => {
+                if let Some(key) = last_key_event.as_ref() {
+                    if key.code == KeyCode::Char('g') && key.modifiers == KeyModifiers::NONE {
+                        self.vm.first();
+                        // gg pressed
+                        EventAction::NeedReDraw
+                    } else {
+                        EventAction::NoNeedReDraw
+                    }
+                } else {
+                    EventAction::NoNeedReDraw
+                }
+            }
+            (KeyCode::Char('y'), KeyModifiers::NONE) => {
+                self.clipboard_context
+                    .lock()
+                    .await
+                    .set_contents(self.vm.selected_s3_uri())
+                    .unwrap();
+                EventAction::NoNeedReDraw
+            }
+            (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
+                self.vm.last();
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                self.refresh().await;
+                EventAction::NoNeedReDraw
+            }
+            (KeyCode::Down, KeyModifiers::NONE) | (KeyCode::Char('j'), KeyModifiers::NONE) => {
+                self.vm.next();
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Up, KeyModifiers::NONE) | (KeyCode::Char('k'), KeyModifiers::NONE) => {
+                self.vm.previous();
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Enter, KeyModifiers::NONE) => {
+                self.enter().await;
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Char('n'), KeyModifiers::NONE) => {
+                self.search_next();
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Char('/'), KeyModifiers::NONE) => {
+                self.search_input = "/".to_owned();
+                self.input_mode = InputMode::Search;
+                EventAction::NeedReDraw
+            }
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
+            _ => EventAction::NoNeedReDraw,
+        }
+    }
+
+    async fn handle_event_in_edit_mode(
+        &mut self,
+        key: KeyEvent,
+        _last_key_event: Option<KeyEvent>,
+    ) -> EventAction {
+        match key.code {
+            KeyCode::Backspace => {
+                if self.search_input.len() > 1 {
+                    self.search_input.pop();
+                }
+                self.search_next();
+                EventAction::NeedReDraw
+            }
+            KeyCode::Char(c) => {
+                self.search_input.push(c);
+                self.search_next();
+                EventAction::NeedReDraw
+            }
+            KeyCode::Esc | KeyCode::Enter => {
+                self.input_mode = InputMode::Normal;
+                EventAction::NeedReDraw
+            }
+            _ => EventAction::NoNeedReDraw,
+        }
+    }
+
     async fn handle_event(&mut self, event: Event) -> EventAction {
         match event {
             Event::ClientEvent(s3output) => {
@@ -178,85 +266,9 @@ impl Controller {
                         let last_key_event = self.key_events.last().map(|e| e.to_owned());
                         self.key_events.push(key);
                         if self.input_mode == InputMode::Normal {
-                            match (key.code, key.modifiers) {
-                                (KeyCode::Char('q'), KeyModifiers::NONE) => EventAction::Exit,
-                                (KeyCode::Char('g'), KeyModifiers::NONE) => {
-                                    if let Some(key) = last_key_event.as_ref() {
-                                        if key.code == KeyCode::Char('g')
-                                            && key.modifiers == KeyModifiers::NONE
-                                        {
-                                            self.vm.first();
-                                            // gg pressed
-                                            EventAction::NeedReDraw
-                                        } else {
-                                            EventAction::NoNeedReDraw
-                                        }
-                                    } else {
-                                        EventAction::NoNeedReDraw
-                                    }
-                                }
-                                (KeyCode::Char('y'), KeyModifiers::NONE) => {
-                                    self.clipboard_context
-                                        .lock()
-                                        .await
-                                        .set_contents(self.vm.selected_s3_uri())
-                                        .unwrap();
-                                    EventAction::NoNeedReDraw
-                                }
-                                (KeyCode::Char('G'), KeyModifiers::SHIFT) => {
-                                    self.vm.last();
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                                    self.refresh().await;
-                                    EventAction::NoNeedReDraw
-                                }
-                                (KeyCode::Down, KeyModifiers::NONE)
-                                | (KeyCode::Char('j'), KeyModifiers::NONE) => {
-                                    self.vm.next();
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Up, KeyModifiers::NONE)
-                                | (KeyCode::Char('k'), KeyModifiers::NONE) => {
-                                    self.vm.previous();
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Enter, KeyModifiers::NONE) => {
-                                    self.enter().await;
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Char('n'), KeyModifiers::NONE) => {
-                                    self.search_next();
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Char('/'), KeyModifiers::NONE) => {
-                                    self.search_input = "/".to_owned();
-                                    self.input_mode = InputMode::Search;
-                                    EventAction::NeedReDraw
-                                }
-                                (KeyCode::Char('c'), KeyModifiers::CONTROL) => EventAction::Exit,
-                                _ => EventAction::NoNeedReDraw,
-                            }
+                            self.handle_event_in_nomal_mode(key, last_key_event).await
                         } else {
-                            match key.code {
-                                KeyCode::Backspace => {
-                                    if self.search_input.len() > 1 {
-                                        self.search_input.pop();
-                                    }
-                                    self.search_next();
-                                    EventAction::NeedReDraw
-                                }
-                                KeyCode::Char(c) => {
-                                    self.search_input.push(c);
-                                    self.search_next();
-                                    EventAction::NeedReDraw
-                                }
-                                KeyCode::Esc | KeyCode::Enter => {
-                                    self.input_mode = InputMode::Normal;
-                                    EventAction::NeedReDraw
-                                }
-                                _ => EventAction::NoNeedReDraw,
-                            }
+                            self.handle_event_in_edit_mode(key, last_key_event).await
                         }
                     }
                     TerminalEvent::Resize(_, _) => EventAction::NeedReDraw,
@@ -366,10 +378,8 @@ impl Controller {
 #[async_trait]
 impl App for Controller {
     fn draw(&mut self, terminal: &mut CrosstermTerminal) -> Result<()> {
-        let selected_s3_uri = self.vm.selected_s3_uri();
-        let bucket_and_prefix = self.vm.bucket_and_prefix();
-        let widget_and_state = self.vm.make_view();
-        if let Some((widget, mut state)) = widget_and_state {
+        let widget_and_state = self.vm.make_item_list_view();
+        if let Some((s3_items_view, mut state)) = widget_and_state {
             terminal.draw(|f| {
                 let rect = f.size();
                 let chunks = Layout::default()
@@ -385,35 +395,9 @@ impl App for Controller {
                     )
                     .split(f.size());
 
-                let current_search_target = if let Some((bucket, prefix)) = bucket_and_prefix {
-                    format!("s3://{}/{}    ", bucket, prefix)
-                } else {
-                    "bucket selection    ".to_owned()
-                };
-
-                let paragraph = Paragraph::new("")
-                    .style(Style::default().fg(Color::Cyan))
-                    .block(
-                        Block::default()
-                            .title(current_search_target)
-                            .borders(Borders::BOTTOM),
-                    );
-
-                // current common prefix
-                f.render_widget(paragraph, chunks[0]);
-
-                // list_view
-                f.render_stateful_widget(widget, chunks[1], &mut state);
-
-                // selected_s3_uri_view
-                let selected_s3_uri_view = Text::from(Span::styled(
-                    selected_s3_uri,
-                    Style::default().fg(Color::Black),
-                ));
-
-                let paragraph =
-                    Paragraph::new(selected_s3_uri_view).style(Style::default().bg(Color::Yellow));
-                f.render_widget(paragraph, chunks[2]);
+                f.render_widget(self.vm.make_currenent_common_prefix_view(), chunks[0]);
+                f.render_stateful_widget(s3_items_view, chunks[1], &mut state);
+                f.render_widget(self.vm.make_selected_s3_item_view(), chunks[2]);
 
                 // search input view
                 let search_input_view =
