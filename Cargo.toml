@@ -6,10 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aws-config = "0.2.0"
-aws-sdk-s3 = "0.2.0"
-aws-sdk-glue = "0.2.0"
-aws-smithy-types = "0.32.0"
+aws-config = "0.15.0"
+aws-sdk-s3 = "0.15.0"
+aws-smithy-types = "0.45.0"
 futures-util = "0.3.17"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6.9", features = ["full"] }
