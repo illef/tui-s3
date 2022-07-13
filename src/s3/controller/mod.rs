@@ -17,13 +17,12 @@ use super::{
     view_model::{S3ItemsViewModel, S3Output},
     S3Item, S3ItemType,
 };
+use copypasta_ext::{prelude::*, x11_fork::ClipboardContext};
 use structopt::StructOpt;
 use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
     Mutex,
 };
-
-use copypasta::{ClipboardContext, ClipboardProvider};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tui-s3", about = "tui for s3")]

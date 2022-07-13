@@ -22,7 +22,7 @@ strum = "0.21.0"
 strum_macros = "0.21.1"
 structopt = "0.3.25"
 async-trait = "0.1.52"
-copypasta = "0.7.1"
+copypasta-ext = "0.3.9"
 
 [[bin]]
 name = "tui-s3"
