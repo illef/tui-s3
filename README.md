@@ -1,11 +1,20 @@
-## TODO
-- [ ] 에러 처리 (e.g 권한이 없는 버킷 접근)
-- [ ] Download to local - d
-- [x] 검색
-- [ ] Multiple S3Bucket Window
-- [ ] Copy to another S3Bucket - c
-- [ ] Delete
-- [x] Refresh - Ctrl + r
-- [x] gg - move to top
-- [x] G - move to bottom
-- [ ] Processing Spinner
+## AWS S3 TUI Browser
+
+
+### Install
+
+> cargo install --git https://github.com/illef/tui-s3 --force
+
+### Run
+
+> tui-s3 `<s3://path>`
+
+### Key Bindings
+
+* k  : up
+* j  : down
+* gg : move to top
+* G  : move to bottom
+* y  : copy selected s3 path to clipboard
+* Ctrl + r : refresh
+* q  : exit
