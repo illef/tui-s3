@@ -95,10 +95,23 @@ impl S3Client {
             .build())
     }
 
-    pub async fn new() -> Result<S3Client> {
-        let region_provider =
-            RegionProviderChain::default_provider().or_else(Region::new("ap-northeast-1"));
-        let config = aws_config::from_env().region(region_provider).load().await;
+    pub async fn new(profile_name: Option<&String>) -> Result<S3Client> {
+        use aws_config::profile::ProfileFileCredentialsProvider;
+        let provider = ProfileFileCredentialsProvider::builder()
+            .profile_name(
+                profile_name
+                    .map(|p| p.as_str())
+                    .or(Some("default"))
+                    .unwrap(),
+            )
+            .build();
+        let region_provider = RegionProviderChain::default_provider();
+
+        let config = aws_config::from_env()
+            .credentials_provider(provider)
+            .region(region_provider)
+            .load()
+            .await;
 
         let client = Client::new(&config);
 

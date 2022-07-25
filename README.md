@@ -7,7 +7,9 @@
 
 ### Run
 
-> tui-s3 `<s3://path>`
+```
+$ tui-s3 [<s3://path>] [--profile <profile_name>]
+```
 
 ### Key Bindings
 

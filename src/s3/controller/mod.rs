@@ -30,6 +30,9 @@ pub struct Opt {
     /// Where to write the output: to `stdout` or `file`
     #[structopt(parse(from_str))]
     s3_path: Option<String>,
+
+    #[structopt(parse(from_str), long = "profile")]
+    profile: Option<String>,
 }
 
 impl Opt {
@@ -76,6 +79,7 @@ mod tests {
     fn test_parse_s3_path() {
         let make_opt = |s: &str| Opt {
             s3_path: Some(s.to_owned()),
+            profile: None,
         };
 
         assert_eq!(
@@ -131,7 +135,7 @@ impl Controller {
         let mut controller = Self {
             vm: S3ItemsViewModel::new(),
             // TODO: 에러 처리
-            client: Arc::new(Mutex::new(S3Client::new().await?)),
+            client: Arc::new(Mutex::new(S3Client::new(opt.profile.as_ref()).await?)),
             ev_tx,
             ev_rx,
             key_events: Default::default(),
