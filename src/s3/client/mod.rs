@@ -4,7 +4,7 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::{
     model::{Bucket, BucketLocationConstraint},
     output::ListObjectsV2Output,
-    Client, Region,
+    Client, Endpoint, Region,
 };
 pub struct S3Client {
     client: Client,
@@ -95,7 +95,10 @@ impl S3Client {
             .build())
     }
 
-    pub async fn new(profile_name: Option<&String>) -> Result<S3Client> {
+    pub async fn new(
+        profile_name: Option<&String>,
+        endpoint_url: Option<&String>,
+    ) -> Result<S3Client> {
         use aws_config::profile::ProfileFileCredentialsProvider;
         let provider = ProfileFileCredentialsProvider::builder()
             .profile_name(
@@ -106,14 +109,18 @@ impl S3Client {
             )
             .build();
         let region_provider = RegionProviderChain::default_provider();
-
         let config = aws_config::from_env()
             .credentials_provider(provider)
-            .region(region_provider)
-            .load()
-            .await;
+            .region(region_provider);
 
-        let client = Client::new(&config);
+        let config = if let Some(endpoint_url) = endpoint_url {
+            let endpoint = Endpoint::immutable(endpoint_url.parse().expect("valid URI"));
+            config.endpoint_resolver(endpoint)
+        } else {
+            config
+        };
+
+        let client = Client::new(&config.load().await);
 
         Ok(S3Client { client })
     }
